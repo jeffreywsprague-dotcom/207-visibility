@@ -853,6 +853,28 @@ function trendCard(done) {
 }
 
 /* ---------- Audit view ---------- */
+// After a new platform key (say, Google AI Mode) or the Google Places key is added, a finished audit
+// can be brought up to date: only the new parts are asked; answers already collected are kept.
+const placesMissing = (progress, site) => !!CONFIG.maps && progress.site?.status === "done" && !(site?.places?.client?.found);
+function updateRow(audit, progress, site, running, key) {
+  if (running) return null;
+  const missing = Object.entries(CONFIG.engines || {}).filter(([e, c]) => c.available && !audit.plan.engines.includes(e)).map(([e]) => e);
+  const places = placesMissing(progress, site);
+  if (!missing.length && !places) return null;
+  const short = (e) => String(CONFIG.engines[e]?.label || e).replace(/\s*\(.*\)\s*$/, "");
+  const per = audit.plan.tasksPerEngine || Object.entries(progress).find(([e]) => e !== "site")?.[1]?.total || 0;
+  const dollars = missing.reduce((t, e) => t + per * (COST[e] || 0.03), 0);
+  const parts = [...missing.map(short), ...(places ? ["Google ratings and reviews"] : [])];
+  const list = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+  const what = [missing.length ? `Asks only ${list(missing.map(short))} the same ${per} questions${dollars ? ` (about $${dollars.toFixed(2)})` : ""}` : "", places ? `${missing.length ? "reads" : "Reads"} the Google listings for you and your competitors` : ""].filter(Boolean).join(" and ");
+  return h("div", { class: "update-row", style: "margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)" },
+    h("p", { style: "margin:0 0 6px" }, h("b", { text: "Not in this audit yet: " }), parts.join(", ")),
+    h("div", { class: "row" },
+      h("button", { class: "btn", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Adding…";
+        try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "add-engines", engines: [...missing, ...(places ? ["site"] : [])] }) }); } catch (err) { alert(err.message); } route(); },
+        text: `Add ${list(parts)}` }),
+      h("span", { class: "small muted", text: `${what}. Answers already collected are kept, and the audit re-scores when it finishes.` })));
+}
 async function renderAudit(key) {
   const data = await api("/api/audit?key=" + encodeURIComponent(key));
   const { audit, progress, summary, site } = data;
@@ -875,11 +897,12 @@ async function renderAudit(key) {
         ? h("div", { class: "row", style: "margin-top:6px" },
             h("button", { class: "btn quiet tiny", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Retrying…"; try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume", engines: [e] }) }); } catch (err) { alert(err.message); } route(); }, text: `Retry ${CONFIG.engines[e]?.label || e}` }),
             h("span", { class: "small muted", text: `Asks only its ${p.total - p.done} unanswered questions. Other platforms are kept.` }))
-        : e === "site" && !running && p.status === "done"
+        : e === "site" && !running && p.status === "done" && !placesMissing(progress, site)
         ? h("div", { class: "row", style: "margin-top:6px" },
             h("button", { class: "btn quiet tiny", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Re-checking…"; try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume", engines: ["site"] }) }); } catch (err) { alert(err.message); } route(); }, text: "Re-check website and listings" }),
-            h("span", { class: "small muted", text: CONFIG.maps && !(site?.places?.client?.found) ? "Adds Google ratings, reviews and hours now that Google Places is set up. AI answers are kept." : "Reads the website and Google listings again. AI answers are kept." }))
+            h("span", { class: "small muted", text: "Reads the website and Google listings again. AI answers are kept." }))
         : null)),
+    updateRow(audit, progress, site, running, key),
     Object.values(progress).some((p) => p.status === "stalled" || p.status === "failed") ? h("button", { class: "btn quiet", onclick: async () => { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume" }) }); route(); }, text: "Resume stalled platforms" }) : null);
   const nodes = [head, prog];
   if (summary) nodes.push(...report(audit, summary, site));

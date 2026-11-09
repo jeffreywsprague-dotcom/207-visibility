@@ -1,7 +1,8 @@
 import { checkAdmin, json, baseUrl } from "../lib/http.mjs";
 import { getJSON, setJSON, del } from "../lib/store.mjs";
 import { summarize } from "../lib/score.mjs";
-import { launchWorkers } from "../lib/plan.mjs";
+import { launchWorkers, buildTasks, COST } from "../lib/plan.mjs";
+import { ENGINES, enginesAvailable } from "../lib/engines.mjs";
 import { finishIfDone } from "../lib/finish.mjs";
 import { isLabel } from "../lib/extract.mjs";
 
@@ -40,6 +41,32 @@ export default async (req) => {
       if (audit.status === "complete") { audit.status = "running"; delete audit.summary; await setJSON("audits", audit.key, audit); }
       await launchWorkers(baseUrl(req), process.env.ADMIN_PASSWORD, audit.key, engines);
       return json({ ok: true, resumed: engines });
+    }
+    if (body.action === "add-engines") {
+      // Bring a finished audit up to date after a new platform key is added (say, Google AI Mode):
+      // ask only the new platforms the same questions; answers already collected are kept.
+      // "site" in the list also re-reads the website and Google listings (after adding Google Places).
+      const avail = enginesAvailable();
+      const asked = Array.isArray(body.engines) ? body.engines : [];
+      const add = [...new Set(asked)].filter((e) => ENGINES[e] && avail[e] && !audit.plan.engines.includes(e));
+      const site = asked.includes("site");
+      if (!add.length && !site) return json({ ok: true, added: [] });
+      const total = buildTasks(audit).length;
+      for (const e of add) await setJSON("answers", `${audit.key}/${e}`, { status: "queued", done: 0, total, answers: [], errors: [] });
+      if (site) {
+        const d = (await getJSON("answers", `${audit.key}/site`)) || { answers: [], errors: [] };
+        delete d.fatal; d.errors = []; d.status = "queued"; d.relaunches = 0; d.updatedAt = Date.now();
+        await setJSON("answers", `${audit.key}/site`, d);
+      }
+      if (add.length) {
+        audit.plan.engines = [...audit.plan.engines, ...add];
+        audit.plan.added = [...(audit.plan.added || []), ...add.map((e) => ({ engine: e, at: new Date().toISOString() }))];
+        audit.plan.estimatedCost = Math.round(((audit.plan.estimatedCost || 0) + add.reduce((t, e) => t + total * (COST[e] || 0.03), 0)) * 100) / 100;
+      }
+      audit.status = "running"; delete audit.summary;
+      await setJSON("audits", audit.key, audit);
+      await launchWorkers(baseUrl(req), process.env.ADMIN_PASSWORD, audit.key, [...add, ...(site ? ["site"] : [])]);
+      return json({ ok: true, added: add, site });
     }
     if (body.action === "rescore") {
       const data = await loadAll(audit);

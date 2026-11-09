@@ -209,7 +209,8 @@ If a platform shows errors, the progress panel shows the message. Common causes:
 - **HTTP 404 or 400 mentioning the model**: the model name changed. Set the matching `..._MODEL` variable to a current model.
 - **Stalled**: click **Resume stalled platforms**.
 - **One platform failed** (a bad key or no credit): fix the key or add credit in that platform’s account, update it in Netlify and trigger a deploy, then open the audit and click **Retry** next to that platform. Only its unanswered questions are asked again; the other platforms’ answers are kept, and the audit finishes and scores itself.
-- **Google ratings and reviews missing** (the Google Places key was added after an audit ran): open the audit and click **Re-check website and listings**. It reads the website and Google listings again and re-scores the audit; no AI questions are asked again.
+- **A key was added after an audit ran** (a new platform such as Google AI Mode, or Google Places): open the audit. Under the progress bars it says what's not in the audit yet; click **Add …**. Only the new platform is asked the same questions (the console shows the cost), the Google listings are read for Google Places, and the audit re-scores itself when they finish. Answers already collected are kept.
+- **Re-check website and listings** (on a finished audit) reads the website and Google listings again, for example after the owner fixes their site; no AI questions are asked again.
 
 ---
 

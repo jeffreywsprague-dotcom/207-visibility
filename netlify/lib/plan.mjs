@@ -30,7 +30,7 @@ export function buildTasks(audit) {
 }
 
 // Rough list-price estimate per answer, in dollars (Nov 2026 research; edit as prices change).
-const COST = { openai: 0.058, gemini: 0.028, perplexity: 0.006, anthropic: 0.02, aimode: 0.004 };
+export const COST = { openai: 0.058, gemini: 0.028, perplexity: 0.006, anthropic: 0.02, aimode: 0.004 };
 
 export async function startAudit(client, opts, base, adminKey) {
   const available = enginesAvailable();
