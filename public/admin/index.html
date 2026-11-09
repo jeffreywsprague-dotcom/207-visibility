@@ -662,7 +662,9 @@ function goalsEditor(p, draw) {
 }
 
 function planCard(c, audits) {
-  let plan = (c.plan || []).map((p) => ({ ...p }));
+  let plan = (c.plan || []).map((p) => ({ ...p, checks: { ...(p.checks || {}) } }));
+  // What the plan looked like when this page loaded, to merge in anything the owner did meanwhile.
+  let base = JSON.parse(JSON.stringify(c.plan || []));
   const wrap = h("div");
   const msg = h("span", { class: "small muted" });
   const draw = () => wrap.replaceChildren(...(plan.length ? plan.map((p, i) => h("div", { class: "plan-row" },
@@ -688,9 +690,23 @@ function planCard(c, audits) {
     for (const [title, detail, when, type] of ownerPlan(d.audit, d.summary, d.site)) if (!have.has(title.toLowerCase())) plan.push({ title, detail, when, type: type || "other", status: "planned" });
     draw(); msg.textContent = "Suggestions added. Edit them, then save.";
   };
+  // The owner can tick steps and benchmarks on their dashboard while this page is open. Before
+  // saving, take the latest client record and keep the owner's changes that staff didn't touch here.
+  const merged = (fresh) => plan.map((p) => {
+    const was = base.find((x) => x.id === p.id), now = (fresh.plan || []).find((x) => x.id === p.id);
+    if (!was || !now) return p;
+    const out = { ...p, checks: { ...(p.checks || {}) } };
+    for (const [k, v] of Object.entries(now.checks || {})) if (!(was.checks || {})[k] && !out.checks[k]) out.checks[k] = v;     // ticked by the owner
+    for (const k of Object.keys(was.checks || {})) if (!(now.checks || {})[k] && (p.checks || {})[k] && !p.checks[k].confirmed && JSON.stringify(p.checks[k]) === JSON.stringify(was.checks[k])) delete out.checks[k]; // unticked by the owner
+    if (p.status === was.status && now.status !== was.status) Object.assign(out, { status: now.status, doneAt: now.doneAt, checkedByOwner: now.checkedByOwner });
+    return out;
+  });
   const save = async () => {
-    const r = await api("/api/clients", { method: "POST", body: JSON.stringify({ client: { ...c, plan } }) });
-    c.plan = r.client.plan; plan = r.client.plan.map((p) => ({ ...p })); draw(); msg.textContent = "Saved. Your client’s dashboard shows the update.";
+    const { clients } = await api("/api/clients");
+    const fresh = clients.find((x) => x.id === c.id) || c;
+    const r = await api("/api/clients", { method: "POST", body: JSON.stringify({ client: { ...fresh, plan: merged(fresh) } }) });
+    Object.assign(c, r.client); base = JSON.parse(JSON.stringify(r.client.plan || []));
+    plan = r.client.plan.map((p) => ({ ...p, checks: { ...(p.checks || {}) } })); draw(); msg.textContent = "Saved. Your client’s dashboard shows the update.";
   };
   return h("div", { class: "card" },
     h("h2", { text: "Plan your client sees" }),
@@ -734,7 +750,13 @@ async function renderAudit(key) {
       h("div", { class: "row", style: "justify-content:space-between" }, h("b", { text: e === "site" ? "Website and listings check" : CONFIG.engines[e]?.label || e }),
         h("span", { class: "small muted", text: `${p.status}${p.total ? ` · ${p.done}/${p.total}` : ""}${p.errors ? ` · ${p.errors} errors` : ""}` })),
       h("div", { class: "prog" }, h("i", { style: `width:${p.total ? Math.round((100 * p.done) / p.total) : p.status === "done" ? 100 : 0}%` })),
-      p.fatal ? h("p", { class: "err small", text: p.fatal }) : p.lastError && p.status !== "done" ? h("p", { class: "small muted", text: "Last error: " + p.lastError }) : null)),
+      p.fatal ? h("p", { class: "err small", text: p.fatal }) : p.lastError && p.status !== "done" ? h("p", { class: "small muted", text: "Last error: " + p.lastError }) : null,
+      // A platform that failed, stalled, or finished with unanswered questions can be retried on its own.
+      e !== "site" && (p.status === "failed" || p.status === "stalled" || (p.status === "done" && p.errors && p.done < p.total))
+        ? h("div", { class: "row", style: "margin-top:6px" },
+            h("button", { class: "btn quiet tiny", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Retrying…"; try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume", engines: [e] }) }); } catch (err) { alert(err.message); } route(); }, text: `Retry ${CONFIG.engines[e]?.label || e}` }),
+            h("span", { class: "small muted", text: `Asks only its ${p.total - p.done} unanswered questions. Other platforms are kept.` }))
+        : null)),
     Object.values(progress).some((p) => p.status === "stalled" || p.status === "failed") ? h("button", { class: "btn quiet", onclick: async () => { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume" }) }); route(); }, text: "Resume stalled platforms" }) : null);
   const nodes = [head, prog];
   if (summary) nodes.push(...report(audit, summary, site));

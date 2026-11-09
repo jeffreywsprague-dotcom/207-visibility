@@ -73,7 +73,7 @@ export default async (req) => {
       } catch (e) {
         const msg = String(e.message || e).slice(0, 400);
         state.errors.push({ i: t.i, engine, qid: t.qid, town: t.town, message: msg, final: !!e.fatal });
-        if (e.fatal && /HTTP (401|403)/.test(msg)) { state.fatal = msg; next = todo.length; }
+        if (e.fatal && /HTTP (401|402|403)/.test(msg)) { state.fatal = msg; next = todo.length; }   // bad key or no credit: stop, don't fail every question
       }
       if (++sinceSave >= 8) { sinceSave = 0; await save(); }
     }

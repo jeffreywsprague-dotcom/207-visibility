@@ -25,8 +25,16 @@ export default async (req) => {
     const body = await req.json();
     if (body.action === "resume") {
       const data = await loadAll(audit);
-      const engines = Object.entries(data).filter(([, d]) => d && d.status !== "done").map(([e]) => e);
-      for (const e of engines) { const d = data[e]; d.status = "queued"; d.relaunches = 0; await setJSON("answers", `${audit.key}/${e}`, d); }
+      // Retry the platforms asked for (even ones that finished with errors), or every one that hasn't finished.
+      const asked = Array.isArray(body.engines) ? body.engines.filter((e) => audit.plan.engines.includes(e)) : [];
+      const engines = asked.length ? asked : Object.entries(data).filter(([, d]) => d && d.status !== "done").map(([e]) => e);
+      for (const e of engines) {
+        const d = data[e] || { answers: [], errors: [] };
+        // After a fixed key or a topped-up account, forget the earlier errors so every unanswered
+        // question is asked again. Answers already collected are kept, so nothing is paid for twice.
+        delete d.fatal; d.errors = []; d.status = "queued"; d.relaunches = 0; d.updatedAt = Date.now();
+        await setJSON("answers", `${audit.key}/${e}`, d);
+      }
       if (audit.status === "complete") { audit.status = "running"; delete audit.summary; await setJSON("audits", audit.key, audit); }
       await launchWorkers(baseUrl(req), process.env.ADMIN_PASSWORD, audit.key, engines);
       return json({ ok: true, resumed: engines });

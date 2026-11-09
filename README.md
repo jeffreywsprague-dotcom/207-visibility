@@ -206,6 +206,7 @@ If a platform shows errors, the progress panel shows the message. Common causes:
 - **HTTP 401 or 403**: the key is wrong, or billing isn’t set up on that account.
 - **HTTP 404 or 400 mentioning the model**: the model name changed. Set the matching `..._MODEL` variable to a current model.
 - **Stalled**: click **Resume stalled platforms**.
+- **One platform failed** (a bad key or no credit): fix the key or add credit in that platform’s account, update it in Netlify and trigger a deploy, then open the audit and click **Retry** next to that platform. Only its unanswered questions are asked again; the other platforms’ answers are kept, and the audit finishes and scores itself.
 
 ---
 
