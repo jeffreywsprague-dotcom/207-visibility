@@ -321,27 +321,140 @@ async function renderEdit(id) {
 const SITE_NAMES = { "yelp.com": "Yelp", "angi.com": "Angi", "houzz.com": "Houzz", "homeadvisor.com": "HomeAdvisor", "bbb.org": "the Better Business Bureau", "getfencefind.com": "FenceFind", "facebook.com": "Facebook", "nextdoor.com": "Nextdoor", "google maps": "Google Maps", "tripadvisor.com": "Tripadvisor", "thumbtack.com": "Thumbtack", "visitmaine.com": "Visit Maine", "wanderlog.com": "Wanderlog", "mainetoday.com": "MaineToday", "visitportland.com": "Visit Portland" };
 const siteName = (d) => SITE_NAMES[d] || d;
 
+// Builds a full starting plan from the audit: what's broken, where the client is weakest (by platform,
+// town, and kind of question), the sites AI cites, reviews against the leader, and how often they're named
+// first. Each step gets real numbers, a timeframe, the owner's part when there is one, and tracked items.
+const ENG_SHORT = { openai: "ChatGPT", gemini: "Gemini", perplexity: "Perplexity", anthropic: "Claude", aimode: "Google AI Mode" };
+const WHEN_ORDER = ["This week", "This month", "Next month", "Ongoing", "Monthly"];
 function ownerPlan(audit, s, site) {
-  const you = s.entities.find((e) => e.isClient);
-  const places = site?.places || {};
-  const plan = [];
-  const f = (t) => (site?.findings || []).find((x) => x.title.startsWith(t));
-  if (f("No website")) plan.push(["Get a website AI can read", "Without a website, AI tools only have directories and your Google listing to go on. We’ll build a fast, simple site with a page for each thing you do and the towns you serve.", "This month", "website"]);
-  if (f("AI crawlers are turned away")) plan.push(["Let every AI assistant read your website", "Your website’s security settings turn away at least one AI assistant’s crawler, so it can’t learn about you. We’ll adjust the setting so they can read your site, while keeping real protection in place.", "This week", "crawler"]);
-  if (s.accuracy.phoneIssues.length) plan.push(["Fix the wrong phone number AI is giving out", `Some AI answers list a phone number that isn’t yours. We’ll find the listing it comes from and correct it.`, "This week", "accuracy"]);
-  const missingTowns = f("Some towns you serve");
-  const townList = missingTowns ? missingTowns.detail.split(/,\s*/).join(" and ") : "";
-  if (missingTowns) plan.push([`Add pages for ${townList}`, `When customers ask about ${townList}, AI looks for pages that mention those towns. Your site doesn’t yet, so competitors with town pages get named instead.`, "This month", "towns"]);
-  if (f("Hours not found")) plan.push(["Publish your hours everywhere", "AI tools answer “who’s open now?” from hours they can read. We’ll put them on your site and match them on every listing.", "This week", "hours"]);
-  if (f("No business schema")) plan.push(["Add business details in the format AI reads", "A small block of behind-the-scenes code tells search engines and AI your exact name, address, phone, and hours. We’ll add and test it.", "This month", "schema"]);
-  const top = s.sources.filter((x) => x.domain !== site?.domain && x.domain !== "google maps").slice(0, 3).map((x) => siteName(x.domain));
-  if (top.length) plan.push([`Get listed and accurate on ${top.join(", ")}`, `These are the sites AI cited most often in your answers. Being on them, with matching details, is the most direct way to get named.`, "This month", "listings"]);
-  const leader = s.entities.filter((e) => !e.isClient).sort((a, b) => (places[b.id]?.reviews || 0) - (places[a.id]?.reviews || 0))[0];
-  if (leader && places.client?.reviews != null && (places[leader.id]?.reviews || 0) > places.client.reviews * 1.5) plan.push(["Grow your reviews", `${leader.name} has ${places[leader.id].reviews} Google reviews to your ${places.client.reviews}. We’ll set up a simple, rule-following way to ask every customer.`, "Ongoing", "reviews"]);
-  plan.push(["Re-check every month", `We’ll run the same ${s.questions.length} questions again next month and show you exactly what changed.`, "Monthly", "other"]);
-  return plan;
-}
+  const steps = [];
+  const add = (o) => steps.push({ when: "This month", type: "other", extra: [], goals: {}, ...o });
+  const track = (label, bench) => ({ label, you: "Checking", bench, met: null });
+  const you = s.entities.find((e) => e.isClient), comps = s.entities.filter((e) => !e.isClient);
+  const c = audit.client || {}, biz = c.business || "you", tradeWord = String(c.trade || "business").toLowerCase();
+  const trades = /company$/.test(tradeWord) ? tradeWord.replace(/company$/, "companies") : /(s|sh|ch|x)$/.test(tradeWord) ? tradeWord + "es" : tradeWord + "s";
+  const places = site?.places || {}, findings = site?.findings || [];
+  const f = (t) => findings.find((x) => x.title.startsWith(t));
+  const ofN = (r) => (r && r.n ? `${r.k} of ${r.n}` : "none of the");
+  const share = (r) => (r && r.n ? pct(r.rate) : "–");
+  const ahead = (a, b) => !!(a?.n && b?.n && a.low > b.high);           // a clearly ahead of b
+  const leaderBy = (map, key) => comps.map((e) => ({ e, r: e[map]?.[key] })).filter((x) => x.r?.n).sort((a, b) => b.r.rate - a.r.rate)[0];
+  const leader = comps.map((e) => ({ e, r: e.overall })).filter((x) => x.r?.n).sort((a, b) => b.r.rate - a.r.rate)[0];
+  const qFor = (group) => (s.questions.find((q) => q.group === group) || {}).text;
+  const list = (a) => (a.length < 3 ? a.join(" and ") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]);
+  const yr = you.overall;
 
+  // 1. No website, or AI can't read it
+  if (f("No website") || (!c.website && !site?.domain)) add({ title: "Get a website AI can read", when: "This month", type: "website",
+    detail: "Without a website, AI tools only have directories and your Google listing to go on. We’ll build a fast, simple site with a page for each thing you do and the towns you serve." });
+  const blockers = [f("AI crawlers are turned away") && "your website’s security settings turn away at least one AI assistant’s crawler",
+    f("robots.txt blocks") && "your robots.txt file tells some AI search crawlers to stay out",
+    f("Homepage is set to noindex") && "your homepage tells search engines not to list it",
+    f("Homepage did not load normally") && "your homepage didn’t load normally when we checked",
+    f("Very little readable text") && "most of your homepage text only appears after scripts run, which many AI crawlers skip"].filter(Boolean);
+  if (blockers.length) add({ title: "Let every AI assistant read your website", when: "This week", type: "crawler",
+    detail: `Right now ${list(blockers)}. Until that’s fixed, assistants like ChatGPT and Perplexity can’t learn about you from your own site. We’ll change the settings; nothing changes for your visitors.` });
+
+  // 2. Wrong details, and whether AI knows who you are
+  const ph = s.accuracy?.phoneIssues || [];
+  if (ph.length) {
+    const engs = [...new Set(ph.map((x) => ENG_SHORT[x.engine] || x.engine))], nums = [...new Set(ph.flatMap((x) => x.phones || []))].slice(0, 3).map((d) => d.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3"));
+    add({ title: "Fix the wrong phone number AI is giving out", when: "This week", type: "accuracy",
+      detail: `In ${ph.length} answer${ph.length === 1 ? "" : "s"} from ${list(engs)}, AI gave out ${nums.length ? list(nums) : "a number"} for ${biz}, which isn’t your number. A customer who calls it never reaches you. We’ll find the old listing it comes from and correct it at the source.` });
+  }
+  const bn = s.accuracy?.brandedNamed;
+  if (bn?.n && bn.rate < 0.9) add({ title: "Make sure AI knows exactly who you are", when: "This week", type: "accuracy",
+    detail: `When customers asked about ${biz} by name, AI clearly recognized you in only ${ofN(bn)} answers. That usually means your name, address, and phone don’t match from one listing to the next, so AI isn’t sure which business is you. We’ll make them match everywhere.` });
+
+  // 3. The core profiles every assistant reads
+  const gem = you.byEngine?.gemini, gpt = you.byEngine?.openai;
+  add({ title: "Claim and complete your Google, Bing, Apple, and Yelp listings", when: "This week", type: "listings",
+    detail: `Each assistant leans on different listings: Gemini and Google’s AI read your Google Business Profile${gem?.n ? ` (Gemini named you in ${ofN(gem)} answers)` : ""}; ChatGPT and Microsoft Copilot lean on Bing and Yelp${gpt?.n ? ` (ChatGPT named you in ${ofN(gpt)})` : ""}; Siri uses Apple Maps with Yelp’s stars. We’ll claim each one, fill in every field, and make the details match. Your part: approve the verification codes (a text, call, or postcard) when they arrive.`,
+    extra: [track("Google Business Profile", "Claimed and complete, with photos and hours"), track("Bing Places", "Claimed and matching Google"), track("Apple Business Connect", "Claimed and matching Google"), track("Yelp", "Claimed and complete")] });
+
+  // 4. The sites AI cites most for this kind of business
+  const covered = /google|bing|apple|yelp/;
+  const top = s.sources.filter((x) => x.domain !== site?.domain && x.domain !== "google maps" && !covered.test(x.domain)).slice(0, 3);
+  if (top.length) add({ title: `Get listed and accurate on ${list(top.map((x) => siteName(x.domain)))}`, when: "This month", type: "listings",
+    detail: `When customers asked about ${trades} near you, AI cited ${list(top.map((x) => `${siteName(x.domain)} in ${pct(x.share)} of answers`))}. Being on these sites, with the same name, address, phone, and hours as everywhere else, is the most direct way to be named.${leader && ahead(leader.r, yr) ? ` ${leader.e.name} is named in ${share(leader.r)} of answers to your ${share(yr)}, so it’s worth checking which of these it’s on.` : ""}`,
+    extra: top.map((x) => track(siteName(x.domain), "Listed, details match")) });
+
+  // 5. The platform where they're weakest
+  const engs = Object.entries(you.byEngine || {}).filter(([, r]) => r?.n).sort((a, b) => a[1].rate - b[1].rate);
+  const [weak, wr] = engs[0] || [];
+  if (weak && engs.length > 1 && (wr.rate === 0 || wr.rate < (yr.rate || 0) * 0.5)) {
+    const lb = leaderBy("byEngine", weak), vs = lb && lb.r.rate > wr.rate ? ` ${lb.e.name} was named in ${ofN(lb.r)}.` : "";
+    const P = {
+      openai: ["Get into ChatGPT’s sources", "listings", "ChatGPT finds local businesses largely through Bing’s search index and sites like Yelp, and it can’t see your Google reviews. We’ll submit your site to Bing Webmaster Tools and build up your Yelp profile.", [track("Bing Webmaster Tools", "Site submitted and indexed")]],
+      gemini: ["Strengthen your Google Maps profile for Gemini", "listings", "Gemini answers from Google Maps: your categories, services, hours, photos, and reviews. We’ll fill in every service and category, add fresh photos, and reply to reviews.", [track("Google Maps photos", "20+ recent photos")]],
+      perplexity: ["Give Perplexity pages of yours to quote", "towns", "Perplexity cites businesses’ own web pages more than any other assistant. A clear page for each service and town gives it something of yours to quote.", []],
+      anthropic: ["Make sure Claude finds the same details everywhere", "listings", "Claude searches the web and reads the directories it finds. When those disagree with each other, it tends to leave you out. We’ll clean up the directories that list you.", []],
+      aimode: ["Win Google’s AI Mode with your Google profile and reviews", "reviews", "Google’s AI Mode leans on your Google Business Profile and Google reviews. Complete details and a steady stream of reviews are what move it.", []]
+    }[weak];
+    if (P) add({ title: P[0], when: "This month", type: P[1], detail: `${ENG_SHORT[weak]} is your weakest platform: it named you in ${ofN(wr)} answers.${vs} ${P[2]}`, extra: P[3] });
+  }
+
+  // 6. Towns: missing from the website, or where competitors win
+  const missingF = f("Some towns you serve"), missing = missingF ? String(missingF.detail || "").split(/,\s*/).filter(Boolean) : [];
+  const weakTowns = (s.locations || []).slice(1).filter((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n && (r.rate < 0.15 || (lb && ahead(lb.r, r))); });
+  const townList = [...new Set([...missing, ...weakTowns])].slice(0, 3);
+  if (townList.length) add({ title: `Add pages for ${list(townList)}`, when: "This month", type: "towns",
+    detail: townList.map((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n ? `For customers in ${t}, AI named you in ${ofN(r)} answers${lb && lb.r.rate > r.rate ? `; ${lb.e.name} was named in ${lb.r.k}` : ""}.${missing.includes(t) ? ` Your website doesn’t mention ${t} yet.` : ""}` : `Your website doesn’t mention ${t} yet.`; }).join(" ") +
+      " AI looks for pages that clearly name the town and the work. A real page per town, with local jobs and photos, gives it something of yours to cite." });
+
+  // 7. The kinds of questions where they're weakest
+  const food = (s.questions || []).some((q) => q.id === "crave1");
+  const em = /plumb|hvac|heat|air|electric|insulat|solar|energy|weather/.test(tradeWord);
+  const G = {
+    "Need it now": ["Make your emergency and same-day service plain", "hours", "AI can only recommend you for urgent jobs if your website and listings say you take them, and when you’re open. We’ll spell out emergency and same-day service on your site and listings."],
+    "Right now": ["Make sure AI knows when you’re open", "hours", "“Open now” answers come from the hours AI can read. We’ll publish your hours everywhere and keep holiday and seasonal hours current."],
+    "A specific job": ["Add a page for each job you want more of", "towns", "AI quotes pages that name the job. A page per service, with real local projects and photos, gives it something to cite when customers ask about that work."],
+    "A specific craving": ["Name the dishes people ask about", "towns", "AI repeats what menus and reviews say plainly. We’ll put your menu on a real web page and name your standout dishes."],
+    "Price and trust": ["Publish price ranges and what affects the cost", "other", "AI tends to recommend businesses that answer the price question. A short page with typical ranges and what changes them helps customers and AI alike."],
+    "Plans and logistics": ["Answer the planning questions: parking, kids, reservations", "other", "Diners ask AI about parking, kids, and reservations. We’ll make sure your site and listings answer each one."],
+    "Only in Maine": em ? ["Get listed on Efficiency Maine’s vendor locator", "listings", "Efficiency Maine’s list of registered vendors is the state’s own directory for rebate-eligible work, and AI cites it for these questions. We’ll get you registered and listed."]
+      : ["Answer the Maine questions on your site", "towns", "Maine-specific questions, like the seasonal ones, go to businesses whose pages talk about them. We’ll add short pages that answer them."],
+    "Anywhere in Maine": ["Build your statewide reputation", "press", "Statewide questions go to the businesses with the most reviews, press, and listings across Maine. Local press, awards, and reviews from customers all over the state are what move these."]
+  };
+  const gaps = Object.entries(you.byGroup || {}).filter(([g, r]) => G[g] && r?.n).map(([g, r]) => { const lb = leaderBy("byGroup", g); return { g, r, lb, gap: (lb ? lb.r.rate : 0.3) - r.rate }; })
+    .filter((x) => x.r.rate < 0.25 || (x.lb && ahead(x.lb.r, x.r))).sort((a, b) => b.gap - a.gap).slice(0, 3);
+  for (const x of gaps) {
+    const [title, type, why] = G[x.g], q = qFor(x.g);
+    const hoursToo = type === "hours" && f("Hours not found") ? " Your hours aren’t on your website yet either, so we’ll add them everywhere." : "";
+    add({ title, type, when: "This month", detail: `For questions like “${q}”, AI named you in ${ofN(x.r)} answers${x.lb && x.lb.r.rate > x.r.rate ? `; ${x.lb.e.name} was named in ${x.lb.r.k}` : ""}. ${why}${hoursToo}` });
+  }
+
+  // 8. Website housekeeping
+  if (f("Hours not found") && !gaps.some((x) => G[x.g][1] === "hours")) add({ title: "Publish your hours everywhere", when: "This week", type: "hours",
+    detail: "AI answers “who’s open now?” from the hours it can read, and it couldn’t find yours on your website. We’ll put them on your site and match them on every listing." });
+  const tune = [f("No business schema") && "add business details in the format AI reads (schema markup)", f("Some schema markup is broken") && "repair broken schema markup",
+    f("Phone number not found") && "put your phone number in plain text", f("Missing page title") && "add a page title", f("Missing meta description") && "add a page description for search results",
+    f("No sitemap") && "add a sitemap so new pages get found"].filter(Boolean);
+  if (tune.length) add({ title: "Tune up your website for AI", when: "This month", type: tune.length === 1 && f("No business schema") ? "schema" : "website",
+    detail: `Small fixes that help AI read your details correctly: ${list(tune)}. None of it changes how your site looks.` });
+
+  // 9. Reviews against the leader
+  const mine = places.client || {}, lrev = comps.map((e) => ({ e, p: places[e.id] })).filter((x) => x.p?.reviews != null).sort((a, b) => b.p.reviews - a.p.reviews)[0];
+  const behind = mine.reviews == null || (lrev && mine.reviews < lrev.p.reviews * 0.8) || mine.reviews < 50 || (mine.rating != null && mine.rating < 4.6);
+  if (behind) {
+    // A goal he can actually reach in four months: about 10 new reviews a month, never past 80% of the leader.
+    const target = Math.max((mine.reviews || 0) + 15, Math.min((mine.reviews || 0) + 40, lrev ? Math.round(lrev.p.reviews * 0.8) : 50));
+    const by = new Date(Date.now() + 120 * 864e5).toLocaleDateString(undefined, { month: "long" });
+    add({ title: "Grow your reviews, every job, every week", when: "Ongoing", type: "reviews",
+      detail: `${mine.reviews != null ? `You have ${mine.reviews} Google reviews${mine.rating ? ` at ${mine.rating}★` : ""}` : "AI leans hardest on review count and rating"}${lrev && mine.reviews != null ? `; ${lrev.e.name} has ${lrev.p.reviews}` : ""}. Review count and rating are the clearest pattern in who AI recommends, and ChatGPT also reads Yelp. We’ll set up a simple, rule-following review request. Your part: send it to every customer after the job.`,
+      goals: { "reviews.count": `${Math.ceil(target / 5) * 5} by ${by}`, ...(mine.rating != null && mine.rating < 4.7 ? { "reviews.rating": "4.7★ or higher" } : {}) } });
+  }
+
+  // 10. Named, but rarely first
+  const fr = you.first;
+  if ((yr.rate || 0) >= 0.1 && fr?.n && fr.rate < (yr.rate || 0) * 0.5 && !gaps.some((x) => x.g === "Anywhere in Maine"))
+    add({ title: "Get into local press and “best of” lists", when: "Next month", type: "press",
+      detail: `AI names you in ${share(yr)} of answers but puts you first in only ${share(fr)}. The business named first usually has third-party praise: local news, awards, chamber and “best of” lists. We’ll pitch you to local writers and nominate you for the next rounds.` });
+
+  add({ title: "Re-measure every month", when: "Monthly", type: "other",
+    detail: `On the 1st we ask the same ${s.questions.length} questions again, from the same towns, and show you exactly what changed, with each finished step marked on your chart.` });
+  return steps.sort((a, b) => WHEN_ORDER.indexOf(a.when) - WHEN_ORDER.indexOf(b.when));
+}
 
 /* ---------- Client detail ---------- */
 async function renderClient(id) {
@@ -689,8 +802,12 @@ function planCard(c, audits) {
     if (!latest) { msg.textContent = "Run an audit first."; return; }
     const d = await api("/api/audit?key=" + encodeURIComponent(latest.key));
     const have = new Set(plan.map((p) => p.title.toLowerCase()));
-    for (const [title, detail, when, type] of ownerPlan(d.audit, d.summary, d.site)) if (!have.has(title.toLowerCase())) plan.push({ title, detail, when, type: type || "other", status: "planned" });
-    draw(); msg.textContent = "Suggestions added. Edit them, then save.";
+    let n = 0;
+    for (const st of ownerPlan(d.audit, d.summary, d.site)) {
+      if (have.has(st.title.toLowerCase())) continue;
+      plan.push({ title: st.title, detail: st.detail, when: st.when, type: st.type || "other", status: "planned", extra: st.extra || [], goals: st.goals || {} }); n++;
+    }
+    draw(); msg.textContent = n ? `${n} steps added from the audit. Fill in anything marked “Checking”, edit the wording, then save.` : "Nothing new to add from this audit.";
   };
   // The owner can tick steps and benchmarks on their dashboard while this page is open. Before
   // saving, take the latest client record and keep the owner's changes that staff didn't touch here.
