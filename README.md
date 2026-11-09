@@ -65,6 +65,8 @@ Check **“Re-run automatically on the 1st of each month”** on a client to tra
 
 ### Target towns
 
+**Statewide clients** (service area set to Statewide) get two extra questions about the whole state, “Who’s the best [trade] in Maine?” and “Top-rated [trades] in Maine,” asked from each test town, alongside the town questions. Pick target towns spread across Maine for them (for example Portland, Bangor and Augusta).
+
 Each audit asks every question as if the customer were in the client’s main town plus up to 3 target towns. Owners can name targets on the snapshot page. To check or improve them, open **Target towns → Suggest target towns** on the client’s page in the console:
 - Paste customer addresses or towns from recent jobs (an invoice or job-list export works). Towns they come from most rank highest.
 - With a Google Places key, the client’s Google reviews are scanned for towns customers mention (Google returns up to 5 reviews).

@@ -354,7 +354,8 @@ async function renderClient(id) {
   const runs = h("select", {}, [2, 3, 5, 10].map((n) => h("option", { value: n, selected: n === 3 ? true : null, text: `${n} runs per question` })));
   const locs = h("select", {}, [1, 2, 3, 4].map((n) => h("option", { value: n, selected: n === Math.min(3, 1 + (c.testTowns || []).length) ? true : null, text: `${n} location${n > 1 ? "s" : ""}` })));
   const est = h("p", { class: "small muted" });
-  const qPerLoc = 11 + (c.customQuestions || []).length;
+  const statewide = Number(c.radius) >= 400;
+  const qPerLoc = 11 + (statewide ? 2 : 0) + (c.customQuestions || []).length;
   const updateEst = () => {
     const engines = [...document.querySelectorAll(".eng:checked")].map((x) => x.value);
     const per = qPerLoc * Number(locs.value) * Number(runs.value) + 3 * Math.min(3, Number(runs.value));
@@ -380,6 +381,7 @@ async function renderClient(id) {
     h("div", { class: "card" },
       h("h2", { text: "Run a measured audit" }),
       h("p", { class: "sub small", text: `Asks ${qPerLoc} customer questions from each location, several times, on each platform, and tracks ${c.business}${c.competitors.length ? " against " + c.competitors.map((x) => x.name).join(", ") : ""}`.replace(/\.?$/, ".") }),
+      statewide ? h("p", { class: "small", style: "margin:-4px 0 12px;color:var(--muted)", text: `Statewide client: 2 of the questions ask about all of Maine (“Who’s the best ${String(c.trade || "business").toLowerCase()} in Maine?”). Pick target towns spread across the state, for example Portland, Bangor and Augusta, so the towns cover the area he serves.` }) : null,
       h("div", { class: "grid2" }, h("div", {}, engChecks), h("div", {}, h("label", { text: "Sampling" }), runs, h("div", { style: "height:8px" }), h("label", { text: "Locations" }), locs)),
       est, h("button", { class: "btn", onclick: start, text: "Start audit" }), err),
     dashboardCard(c, done.length > 0),

@@ -981,7 +981,17 @@ function foodSets(){
     { label:"About you, by name", you:true, qs:[`Is ${biz} any good?`, `${biz} hours`, `${biz} or another ${t} in ${town}?`] }
   ];
 }
+// Statewide businesses also compete on questions about the whole state.
+function statewideSet(){
+  const t = noun(), ts = plural(t);
+  return { label:"Anywhere in Maine", qs: isFood() ? [`What’s the best ${t} in Maine?`, `Which ${ts} in Maine are worth the drive?`] : [`Who’s the best ${t} in Maine?`, `Top-rated ${ts} in Maine`] };
+}
 function questionSets(){
+  const sets = baseSets();
+  if (isStatewide()) sets.splice(sets.length - 1, 0, statewideSet());
+  return sets;
+}
+function baseSets(){
   if (isFood()) return foodSets();
   const t = noun(), a = article(t), ts = plural(t);
   const town = clean(state.town) || "your town";
@@ -1048,6 +1058,9 @@ function assessQuestions(){
         break;
       case "Plans and logistics":
         why = i === 0 ? "Parking is rarely written down, so AI credits whichever place mentions it first." : "Kid-friendly answers rely on listing details and reviews that mention families.";
+        break;
+      case "Anywhere in Maine":
+        why = i === 0 ? "Statewide answers favor businesses with the most reviews, press, and listings across Maine, not just in one town." : "“Top-rated” across a whole state usually goes to the businesses with the biggest review counts.";
         break;
       case "Only in Maine":
         if (isFood()){ why = i === 0 ? "“Where locals eat” answers draw on local press and food writers more than ads." : "Lobster roll answers lean on Maine food guides and local “best of” lists."; break; }

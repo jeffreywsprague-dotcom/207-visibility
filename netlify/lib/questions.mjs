@@ -116,6 +116,16 @@ export function discoveryQuestions(client, town) {
       ["maine2", "Only in Maine", me[1]]
     ];
   }
+  // Statewide businesses also compete on questions about the whole state, asked from each test town.
+  if (mi >= 400) {
+    const stName = st === "ME" ? "Maine" : st;
+    list.push(isFood(client.trade)
+      ? ["state1", "Anywhere in Maine", `What’s the best ${t} in ${stName}?`]
+      : ["state1", "Anywhere in Maine", `Who’s the best ${t} in ${stName}?`]);
+    list.push(isFood(client.trade)
+      ? ["state2", "Anywhere in Maine", `Which ${ts} in ${stName} are worth the drive?`]
+      : ["state2", "Anywhere in Maine", `Top-rated ${ts} in ${stName}`]);
+  }
   const custom = (client.customQuestions || []).filter(Boolean).map((q, i) => [`custom${i + 1}`, "Your custom questions", q.replace(/\{town\}/g, town)]);
   return list.concat(custom).map(([id, group, text]) => ({ id, group, text, town, branded: false }));
 }
