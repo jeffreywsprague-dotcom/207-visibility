@@ -38,7 +38,7 @@ In Netlify, go to **Project configuration → Environment variables → Add a va
 | `GEMINI_API_KEY` | From aistudio.google.com → Get API key | Recommended |
 | `PERPLEXITY_API_KEY` | From the Perplexity API console | Recommended |
 | `ANTHROPIC_API_KEY` | From console.anthropic.com → API keys | Optional |
-| `GOOGLE_MAPS_API_KEY` | Google Cloud key with **Places API (New)** enabled. Adds Google ratings, review counts, and hours | Optional |
+| `GOOGLE_MAPS_API_KEY` | Google Cloud key with **Places API (New)** enabled. Adds Google ratings, review counts, and hours. About 5 to 10 lookups per audit, well inside Google’s free monthly allowance at launch volume | Optional |
 | `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | From app.dataforseo.com → API Access. Adds **Google AI Mode** as a fifth platform | Recommended |
 | `GA4_SERVICE_ACCOUNT_JSON` | A Google Cloud service account key (the whole JSON). Lets audits count **visits from AI** in clients’ Google Analytics | Optional |
 | `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` | From resend.com, plus a sender like `207 Visibility <hello@yourdomain.com>`. Sends **monthly summary emails** | Optional |
@@ -209,6 +209,7 @@ If a platform shows errors, the progress panel shows the message. Common causes:
 - **HTTP 404 or 400 mentioning the model**: the model name changed. Set the matching `..._MODEL` variable to a current model.
 - **Stalled**: click **Resume stalled platforms**.
 - **One platform failed** (a bad key or no credit): fix the key or add credit in that platform’s account, update it in Netlify and trigger a deploy, then open the audit and click **Retry** next to that platform. Only its unanswered questions are asked again; the other platforms’ answers are kept, and the audit finishes and scores itself.
+- **Google ratings and reviews missing** (the Google Places key was added after an audit ran): open the audit and click **Re-check website and listings**. It reads the website and Google listings again and re-scores the audit; no AI questions are asked again.
 
 ---
 

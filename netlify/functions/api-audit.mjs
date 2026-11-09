@@ -27,7 +27,8 @@ export default async (req) => {
     if (body.action === "resume") {
       const data = await loadAll(audit);
       // Retry the platforms asked for (even ones that finished with errors), or every one that hasn't finished.
-      const asked = Array.isArray(body.engines) ? body.engines.filter((e) => audit.plan.engines.includes(e)) : [];
+      // "site" re-runs only the website and Google listings check (say, after adding the Google Places key).
+      const asked = Array.isArray(body.engines) ? body.engines.filter((e) => [...audit.plan.engines, "site"].includes(e)) : [];
       const engines = asked.length ? asked : Object.entries(data).filter(([, d]) => d && d.status !== "done").map(([e]) => e);
       for (const e of engines) {
         const d = data[e] || { answers: [], errors: [] };
