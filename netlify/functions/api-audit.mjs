@@ -3,6 +3,7 @@ import { getJSON, setJSON, del } from "../lib/store.mjs";
 import { summarize } from "../lib/score.mjs";
 import { launchWorkers } from "../lib/plan.mjs";
 import { finishIfDone } from "../lib/finish.mjs";
+import { isLabel } from "../lib/extract.mjs";
 
 export const config = { path: "/api/audit" };
 const STALE_MS = 17 * 60 * 1000;
@@ -66,7 +67,8 @@ export default async (req) => {
   const raw = url.searchParams.get("raw") === "1";
   return json({
     audit: { key: audit.key, id: audit.id, clientId: audit.clientId, kind: audit.kind || "audit", createdAt: audit.createdAt, completedAt: audit.completedAt, status: audit.status, plan: audit.plan, entities: audit.entities.map(({ _aliases, ...e }) => e), client: audit.client },
-    progress, summary: audit.summary || null, site: data.site?.site || null,
+    // Older audits may list labels like "Phone:" among the businesses AI named; leave them out.
+    progress, summary: audit.summary ? { ...audit.summary, others: (audit.summary.others || []).filter((o) => !isLabel(o.name)) } : null, site: data.site?.site || null,
     answers: raw ? audit.plan.engines.flatMap((e) => (data[e]?.answers || []).map(({ analysis, ...a }) => ({ ...a, named: Object.fromEntries(Object.entries(analysis.entities).map(([id, r]) => [id, r.named ? (r.rank || "yes") : ""])) }))) : undefined
   });
 };

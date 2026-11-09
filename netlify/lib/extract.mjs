@@ -45,6 +45,25 @@ export function listItems(text) {
   return items.length >= 2 ? items : [];
 }
 
+// Words that make up the labels AI puts in its lists ("**Phone:** ...", "**Services Offered:** ...",
+// "**Why choose them:** ..."). A short name made only of these words is a label, not a business.
+const GENERIC = new Set(("phone number numbers location locations address addresses hours hour operation operating open now today days schedule " +
+  "service services offered offer offering area areas served serving website site web email e mail contact contacts info information " +
+  "review reviews rating ratings stars customer customers feedback reputation testimonials google yelp facebook bbb angi houzz tripadvisor nextdoor homeadvisor thumbtack " +
+  "price prices pricing cost costs rate rates fee fees estimate estimates estimated typical average quote quotes payment payments insurance " +
+  "specialty specialties specializes specialization why choose them it this how what when where who which note notes tip tips summary overview " +
+  "recommendation recommendations recommended option options source sources pros cons highlight highlights feature features key " +
+  "experience years established founded owner owners licensed license licensing insured bonded certification certifications certified warranty guarantee " +
+  "family owned operated free same day fast response response time " +
+  "emergency availability available booking book appointment appointments reservations reservation menu parking directions " +
+  "best for good great top picks pick consider considerations important things bottom line verdict final thoughts next steps step " +
+  "in conclusion details detail description about overall quick facts fact other more additional also the a an of and to with your you call ahead " +
+  "social media hours: details: contact: local nearby trust trusted reliable why: alternatives alternative similar businesses business").split(/\s+/));
+export function isLabel(name) {
+  const words = String(name || "").toLowerCase().replace(/\*|_/g, "").replace(/[^a-z0-9&' ]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  return !words.length || (words.length <= 5 && words.every((w) => GENERIC.has(w)));
+}
+
 // Guess the business name at the start of a list item: "**Acme Fence** – great reviews" -> "Acme Fence".
 export function leadName(item) {
   let s = item.replace(/\[[^\]]*\]\([^)]*\)/g, (m) => m.replace(/\]\([^)]*\)/, "]")).replace(/[[\]]/g, "");
@@ -97,6 +116,7 @@ export function analyze(answer, entities) {
   const tracked = entities.flatMap((e) => e._aliases);
   const candidates = items.map(leadName).filter(Boolean).concat(answer.places || []);
   for (const c of candidates) {
+    if (isLabel(c)) continue;
     const n = norm(c);
     if (tracked.some((a) => n.includes(" " + a + " ") || (" " + a + " ").includes(n))) continue;
     others.add(c.replace(/\s+/g, " ").trim());

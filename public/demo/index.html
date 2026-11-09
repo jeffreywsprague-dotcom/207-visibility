@@ -298,11 +298,13 @@ mark.m-them{background:transparent;color:inherit;border-bottom:2px solid var(--t
 .mini.sm.half::after,.mini.sm.full::after{left:3px;top:0;width:4px;height:7px;border-width:0 1.5px 1.5px 0;}
 .sim-top{display:flex;align-items:center;gap:18px;margin:6px 0 12px;}
 .sim-n{font-weight:600;font-size:2.4rem;line-height:1;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums;}
-.sim-n.proj{color:var(--pass);}
+.sim-n.proj{color:var(--pass);transition:color .3s;}
+.sim-n.proj.none{color:var(--faint);}
 .sim-arrow{font-size:1.4rem;color:var(--faint);}
 .sim-gauge{position:relative;height:10px;background:var(--panel-2);border-radius:5px;overflow:hidden;margin-bottom:12px;}
 .sim-gauge .g-now{position:absolute;left:0;top:0;bottom:0;background:var(--you);}
-.sim-gauge .g-band{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--pass) 0 5px,transparent 5px 9px);opacity:.85;}
+.sim-gauge .g-gain{position:absolute;top:0;bottom:0;background:var(--pass);opacity:.45;transition:left .5s ease,width .5s ease;}
+.sim-gauge .g-band{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--pass) 0 5px,transparent 5px 9px);opacity:.85;transition:left .5s ease,width .5s ease;}
 .simlist{list-style:none;margin:0;padding:0;}
 .simlist li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--rule);font-size:.88rem;}
 .sw{width:36px;height:20px;border-radius:10px;border:0;background:var(--rule-strong);position:relative;cursor:pointer;padding:0;}
@@ -310,6 +312,11 @@ mark.m-them{background:transparent;color:inherit;border-bottom:2px solid var(--t
 .sw[aria-checked="true"]{background:var(--pass);}
 .sw[aria-checked="true"]::after{left:19px;}
 .sl-t{color:var(--ink);}
+.simlist li:not(.on) .sl-v{color:var(--faint);font-weight:500;}
+.simlist li.on .sl-v{color:var(--pass);font-weight:700;}
+.sim-acts{display:flex;gap:18px;margin:10px 0 2px;}
+.sim-acts button{background:none;border:0;padding:0;color:var(--you);font-weight:650;font-size:.84rem;cursor:pointer;}
+.sim-acts button:hover{text-decoration:underline;}
 .sl-v{font-weight:650;color:var(--pass);white-space:nowrap;font-size:.84rem;font-variant-numeric:tabular-nums;}
 
 /* Breakdown */
@@ -417,7 +424,7 @@ dialog::backdrop{background:rgba(0,10,30,.5);}
 .demobar{background:#FBF0DF;color:#6B3B00;font-size:.84rem;font-weight:600;text-align:center;padding:7px 16px;}
 .demobar a{color:#6B3B00;}
 
-@media (prefers-reduced-motion: reduce){ .sw::after,.bm summary::before,.rc-bar i{transition:none;} .rc-bar.wait i{animation:none;width:100%;opacity:.5;} }
+@media (prefers-reduced-motion: reduce){ .sim-gauge span,.sw::after,.bm summary::before,.rc-bar i{transition:none;} .rc-bar.wait i{animation:none;width:100%;opacity:.5;} }
 @media (max-width:980px){
   .hero-grid{grid-template-columns:1fr;align-items:start;}
   .c7,.c5,.c6,.c8,.c4{grid-column:1 / -1;}
@@ -601,7 +608,8 @@ let TAB = "overview";
 let TREND = "rate";
 let PRINT_ALL = false;
 const OPEN_STEPS = new Set();
-const SIM_OFF = new Set();
+const SIM_ON = new Set();   // plan steps the owner has switched on in the simulator; every step starts off
+let SIM_PREV = null;         // where the projection was, so it slides to the new estimate
 const PROOF = { qid: null, i: 0, full: false };
 // Calendar dates ("2026-12-01") are days, not instants: read them in local time so they don't shift a day.
 function toDate(d) {
@@ -1245,24 +1253,36 @@ function simPanel() {
   const plan = DATA.plan || [], open = plan.filter((p) => p.status !== "done");
   if (!open.length) return h("section", { class: "panel c5" }, h("h2", { text: "Plan simulator" }), h("p", { class: "sub", text: "Every step is finished, so there’s nothing left to project. We’ll keep measuring." }));
   const latest = scoreOf(DATA.audits[DATA.audits.length - 1]);
-  const chosen = open.filter((p) => !SIM_OFF.has(p.id));
+  // Every step starts switched off: the owner switches steps on and watches the estimate move.
+  const chosen = open.filter((p) => SIM_ON.has(p.id));
   const all = simulate(latest.m, chosen.map((p) => ({ type: p.type || "other" })));
+  const to = chosen.length ? { low: all.low, high: all.high } : { low: all.now, high: all.now };
+  const from = SIM_PREV || { low: all.now, high: all.now };
+  SIM_PREV = to;
+  const place = (lo, hi) => ({ gain: `left:${all.now}%;width:${Math.max(0, lo - all.now)}%`, band: `left:${lo}%;width:${Math.max(0, hi - lo)}%` });
+  const start = place(from.low, from.high), end = place(to.low, to.high);
+  const gain = h("span", { class: "g-gain", style: start.gain }), band = h("span", { class: "g-band", style: start.band });
+  requestAnimationFrame(() => requestAnimationFrame(() => { gain.style.cssText = end.gain; band.style.cssText = end.band; }));
+  const flip = (p) => { SIM_ON.has(p.id) ? SIM_ON.delete(p.id) : SIM_ON.add(p.id); render(); };
   return h("section", { class: "panel c5 sticky" },
-    h("div", { class: "panel-h" }, h("h2", { text: "Plan simulator" }), h("span", { class: "muted small", text: "Switch steps on and off" })),
+    h("div", { class: "panel-h" }, h("h2", { text: "Plan simulator" }), h("span", { class: "muted small", text: "Switch on steps to see what they could add" })),
     h("div", { class: "sim-top" },
       h("div", {}, h("div", { class: "muted small", text: "Score now" }), h("div", { class: "sim-n", text: String(all.now) })),
       h("div", { class: "sim-arrow", "aria-hidden": "true", text: "→" }),
-      h("div", {}, h("div", { class: "muted small", text: chosen.length ? `Estimate with ${chosen.length} step${chosen.length === 1 ? "" : "s"} done` : "No steps selected" }),
-        h("div", { class: "sim-n proj", text: all.low === all.high ? String(all.low) : `${all.low}–${all.high}` }))),
-    h("div", { class: "sim-gauge", role: "img", "aria-label": `Score now ${all.now}; estimated ${all.low} to ${all.high}` },
-      h("span", { class: "g-now", style: `width:${all.now}%` }), h("span", { class: "g-band", style: `left:${all.low}%;width:${Math.max(1, all.high - all.low)}%` })),
+      h("div", {}, h("div", { class: "muted small", text: chosen.length ? `Estimate with ${chosen.length} step${chosen.length === 1 ? "" : "s"} done` : "Switch on a step below" }),
+        h("div", { class: "sim-n proj" + (chosen.length ? "" : " none"), "aria-live": "polite", text: !chosen.length ? String(all.now) : all.low === all.high ? String(all.low) : `${all.low}–${all.high}` }))),
+    h("div", { class: "sim-gauge", role: "img", "aria-label": chosen.length ? `Score now ${all.now}; estimated ${all.low} to ${all.high}` : `Score now ${all.now}` },
+      h("span", { class: "g-now", style: `width:${all.now}%` }), gain, band),
     h("ul", { class: "simlist" }, open.map((p) => {
-      const on = !SIM_OFF.has(p.id), r = simulate(latest.m, [{ type: p.type || "other" }]), lo = r.low - r.now, hi = r.high - r.now;
-      return h("li", {},
-        h("button", { type: "button", class: "sw", role: "switch", "aria-checked": on ? "true" : "false", "aria-label": `Include “${p.title}”`, onclick: () => { on ? SIM_OFF.add(p.id) : SIM_OFF.delete(p.id); render(); } }),
+      const on = SIM_ON.has(p.id), r = simulate(latest.m, [{ type: p.type || "other" }]), lo = r.low - r.now, hi = r.high - r.now;
+      return h("li", { class: on ? "on" : null },
+        h("button", { type: "button", class: "sw", role: "switch", "aria-checked": on ? "true" : "false", "aria-label": `Include “${p.title}”`, onclick: () => flip(p) }),
         h("span", { class: "sl-t", text: p.title }),
         h("span", { class: "sl-v", text: hi <= 0 ? "small" : lo === hi ? `+${hi}` : `+${Math.max(0, lo)} to +${hi}` }));
     })),
+    h("div", { class: "sim-acts" },
+      chosen.length < open.length ? h("button", { type: "button", onclick: () => { open.forEach((p) => SIM_ON.add(p.id)); render(); }, text: "Switch all on" }) : null,
+      chosen.length ? h("button", { type: "button", onclick: () => { SIM_ON.clear(); render(); }, text: "Clear" }) : null),
     h("p", { class: "note", text: "Estimates, not promises. Website, listing, and review points are recalculated with the score’s own rules. Visibility gains are educated estimates based on your gap to the most-named local businesses; no one can yet prove exactly what moves AI. Steps overlap, so the total is less than the sum. Each measurement shows what really happened." }));
 }
 

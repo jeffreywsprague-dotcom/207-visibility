@@ -20,7 +20,7 @@
 import { json, rid, slug } from "../lib/http.mjs";
 import { getJSON, setJSON } from "../lib/store.mjs";
 import { ask, ENGINES, enginesAvailable } from "../lib/engines.mjs";
-import { analyze, listItems, leadName, norm, aliasesFor, domainOf } from "../lib/extract.mjs";
+import { analyze, listItems, leadName, norm, aliasesFor, domainOf, isLabel } from "../lib/extract.mjs";
 import { discoveryQuestions } from "../lib/questions.mjs";
 import { locate } from "../lib/places.mjs";
 
@@ -73,7 +73,7 @@ export function namesIn(answer, business) {
   const out = [], seen = new Set();
   const add = (raw) => {
     const name = String(raw || "").replace(/\s+/g, " ").replace(/[.,:;]+$/, "").trim();
-    if (!name || name.length < 3) return;
+    if (!name || name.length < 3 || isLabel(name)) return;
     const n = norm(name);
     if (mine.some((a) => n.includes(" " + a + " ") || (" " + a + " ").includes(n))) return;
     if (/^ (the )?(best|top|why|how|what|note|tips?|summary|overview|recommendations?|options?|sources?|pricing|cost|hours|reviews?|address|phone|website|location|services?) /.test(n)) return;

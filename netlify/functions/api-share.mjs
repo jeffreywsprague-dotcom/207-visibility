@@ -2,7 +2,7 @@
 // Sends compact monthly totals for the trend, plus full answers for one month at a time.
 import { json } from "../lib/http.mjs";
 import { getJSON, setJSON, listKeys } from "../lib/store.mjs";
-import { domainOf } from "../lib/extract.mjs";
+import { domainOf, isLabel } from "../lib/extract.mjs";
 import { recheckSettings, recheckStatus } from "../lib/recheck.mjs";
 import { normNotify, cleanEmail, cleanPhone } from "../lib/notify.mjs";
 import { ga4Settings } from "../lib/ga4.mjs";
@@ -28,7 +28,7 @@ async function answersFor(audit) {
         text: String(a.text || "").slice(0, 2500),
         citations: (a.citations || []).slice(0, 10).map((c) => ({ url: c.url, domain: domainOf(c.url, c.title) })),
         hits: Object.fromEntries(Object.entries(a.analysis?.entities || {}).map(([id, r]) => [id, r.named ? (r.rank ?? 0) : null])),
-        others: (a.analysis?.others || []).slice(0, 6)
+        others: (a.analysis?.others || []).filter((o) => !isLabel(o)).slice(0, 6)   // labels like "Phone:" aren't competitors
       });
     }
   }

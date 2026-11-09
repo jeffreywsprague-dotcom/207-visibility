@@ -1,7 +1,7 @@
 // Turns raw answers into the numbers in the report. Rates come with a 95% Wilson
 // confidence range, which behaves well for small samples and rates near 0% or 100%.
 
-import { digits, phonesIn, norm } from "./extract.mjs";
+import { digits, phonesIn, norm, isLabel } from "./extract.mjs";
 
 export function wilson(k, n, z = 1.96) {
   if (!n) return { k: 0, n: 0, rate: null, low: null, high: null };
@@ -42,7 +42,7 @@ export function summarize(audit, engineData, site) {
       inc(s.byGroup, a.group, r.named);
     }
     for (const d of a.analysis.domains) domainCount[d] = (domainCount[d] || 0) + 1;
-    for (const o of a.analysis.others) { const key = norm(o).trim(); if (!key) continue; const c = otherCount[key] || (otherCount[key] = { name: o, count: 0 }); c.count++; }
+    for (const o of a.analysis.others) { if (isLabel(o)) continue; const key = norm(o).trim(); if (!key) continue; const c = otherCount[key] || (otherCount[key] = { name: o, count: 0 }); c.count++; }
   }
   // inc() above writes into s.overall/s.first via key; fix the shape (inc expects a parent object)
   const out = entities.map((e) => {
