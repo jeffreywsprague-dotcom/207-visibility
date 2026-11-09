@@ -806,7 +806,10 @@ function scoreRange(audit) {
 const realChange = (a, b) => (!b ? null : a.lo > b.hi ? "up" : a.hi < b.lo ? "down" : "flat");
 
 /* ---------- Plain English ---------- */
-const article = (w) => (/^[aeiou]/i.test(String(w).trim()) ? "an" : "a");
+// "an HVAC company", "an electrician", "a plumber": acronyms go by how the letter sounds.
+const article = (w) => { const first = String(w).trim().split(/\s+/)[0]; if (/^[A-Z]{2,}$/.test(first)) return /^[AEFHILMNORSX]/.test(first) ? "an" : "a"; return /^[aeiou]/i.test(first) ? "an" : "a"; };
+// Lowercase a trade for a sentence, but keep acronyms like HVAC.
+const tradeText = (t) => String(t || "business").trim().split(/\s+/).map((w) => (/^[A-Z]{2,}$/.test(w) ? w : w.toLowerCase())).join(" ");
 function ofTen(r) {
   if (!r || r.rate == null) return null;
   if (r.k === 0) return "none";
@@ -970,7 +973,7 @@ function goTab(id, focus) {
 function hero(ctx) {
   const { audits, au, prev, you } = ctx;
   const yr = overall(au).ents[you.id].rate, pyr = prev ? overall(prev).ents[you.id].rate : null;
-  const trade = String(DATA.client.trade || "business").toLowerCase(), ask = `When customers ask AI for ${article(trade)} ${trade}, it `;
+  const trade = tradeText(DATA.client.trade), ask = `When customers ask AI for ${article(trade)} ${trade}, it `;
   const words = ofTen(yr);
   const sentence = !yr.n ? ["We don’t have answers for this measurement yet."]
     : words === "none" ? [ask + "hasn’t named you yet: ", h("em", { text: `0 of ${yr.n}` }), " answers."]

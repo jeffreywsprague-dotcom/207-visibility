@@ -2,7 +2,8 @@
 
 This project is your website plus a private audit engine that runs on Netlify.
 
-- **`public/index.html`**: the public snapshot page you already have.
+- **`public/index.html`**: your public home page and the **free check**: an owner enters their business and sees real AI answers to a few of their customers’ questions, an estimate across every way customers ask, what you’d fix, and a request form for the full audit.
+- **`public/demo/`**: a sample owner dashboard (made-up business) that the home page links to, so owners can try the dashboard before they buy.
 - **`public/admin/`**: your private **audit console** at `yoursite.netlify.app/admin`, protected by a password.
 - **`netlify/functions/`**: the server side. It asks ChatGPT, Gemini (with Google Maps data), Perplexity, and Claude your clients’ customer questions many times, from several towns, and scores how often each business gets named.
 
@@ -22,13 +23,13 @@ Netlify needs to build the server functions, and the most reliable way is from a
 
 ### 2. Connect it to Netlify
 1. In Netlify, open your existing 207 Visibility site.
-2. Go to **Site configuration → Build & deploy → Continuous deployment → Link repository**, choose GitHub, and pick `207-visibility`.
+2. Go to **Project configuration → Developer settings → Continuous deployment → Repository → Link repository**, choose GitHub, and pick `207-visibility` (choose **Link to existing repository**).
 3. Netlify reads the settings from `netlify.toml` automatically (publish folder `public`, functions folder `netlify/functions`). Leave the build command empty and deploy.
 
 From now on, every change you upload to GitHub deploys automatically. You no longer drag files onto Netlify.
 
 ### 3. Add your secrets
-In Netlify, go to **Site configuration → Environment variables → Add a variable**. Make sure each one is available to **Functions**. Add:
+In Netlify, go to **Project configuration → Environment variables → Add a variable** (choose **Import from a .env file** to paste them all at once). Make sure each one is available to **Functions**. Add:
 
 | Name | What it is | Required? |
 |---|---|---|
@@ -176,6 +177,26 @@ To send automatically:
 - **Texts:** create a Twilio account, buy a local number, and set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM`. US carriers require business texting from local numbers to be registered (A2P 10DLC); Twilio walks you through it, and approval can take a few days.
 
 Use **Send a test** on a client’s page to check both.
+
+## Your home page and the free check
+
+The free check on your home page asks AI real questions. When an owner checks their business, the page sends three of their customers’ questions to Perplexity and Claude (the two cheapest platforms) and shows each answer: whether the owner was named, and who was named instead. It costs about 8 cents per check at list prices, and the Claude part comes out of a Claude Max plan’s monthly API credit if you’ve linked one.
+
+It has no password, so it’s limited: each visitor gets 3 checks a day, the whole site gets 60 a day, each question runs once per check, and a check expires after 30 minutes. Checking the same business and town again within a week shows the saved answers instead of asking AI again, so repeat checks cost nothing and don’t use up a visitor’s limit. When a limit is hit or a platform is down, the page explains and shows its estimate instead. Optional settings:
+
+| Name | What it does | Default |
+|---|---|---|
+| `LIVE_CHECK_ENABLED` | `false` turns live answers off (the page shows its estimate) | on |
+| `LIVE_CHECK_ENGINES` | Platforms to ask, from `openai`, `gemini`, `perplexity`, `anthropic` | `perplexity,anthropic` |
+| `LIVE_CHECK_QUESTIONS` | Questions per check (1–4) | `3` |
+| `LIVE_CHECK_DAILY_CAP` | Checks per day across the whole site | `60` |
+| `LIVE_CHECK_PER_VISITOR` | Checks per visitor per day | `3` |
+
+Adding ChatGPT (`openai`) raises the cost to about 25 cents a check; Gemini with Google Maps adds about 8 cents.
+
+**The sample dashboard.** The home page and the full sample at `/demo/` show one of eight made-up Maine businesses (a fence company in Gardiner, a plumber in Portland, a diner in Bangor, a roofer in Lewiston, an HVAC company in Biddeford, a dentist in Rockland, a landscaper in Brunswick, an auto shop in Presque Isle), picked at random. Visitors can click **Show another business**, and **Open the full sample** opens the same business in full (`/demo/?s=hvac`, for example). An owner’s results page links to the sample closest to their trade.
+
+**Your offer and your name.** Near the top of the script in `public/index.html` is a `SETTINGS` block. Change `offer` (now “Free while we launch in Maine”) to whatever you’re offering for the full audit, and fill in `contact` with your name and a phone number or email to put a short personal note on the home page. Edit the file on GitHub (open it, click the pencil, search for `SETTINGS`) and commit; Netlify redeploys on its own.
 
 ## Your first live test
 
