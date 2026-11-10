@@ -210,7 +210,7 @@ function renderLogin() {
 
 /* ---------- Clients ---------- */
 async function renderClients() {
-  const [{ clients }, { leads }, rk] = await Promise.all([api("/api/clients"), api("/api/leads"), api("/api/rechecks").catch(() => null)]);
+  const [{ clients }, { leads }, rk, su] = await Promise.all([api("/api/clients"), api("/api/leads"), api("/api/rechecks").catch(() => null), api("/api/signups").catch(() => null)]);
   const fresh = leads.filter((l) => l.status === "new");
   const eng = Object.entries(CONFIG.engines);
   const act = async (ev, lead, action, startAudit) => {
@@ -225,9 +225,11 @@ async function renderClients() {
   mount(
     h("div", { class: "row", style: "justify-content:space-between" }, h("div", {}, h("h1", { text: "Clients" }), h("p", { class: "sub", text: "Businesses you audit and track." })),
       h("a", { class: "btn quiet", href: "#edit/new", text: "Add a client by hand" })),
-    h("div", { class: "card" + (fresh.length ? " leads" : "") },
+    signupsInbox(su),
+    // Older snapshot requests (the home page now sends owners to sign up and pay instead).
+    !fresh.length ? null : h("div", { class: "card leads" },
       h("h2", { text: fresh.length ? `New snapshot requests (${fresh.length})` : "Snapshot requests" }),
-      h("p", { class: "sub small", text: "When an owner taps “Request my full audit” on your website, their snapshot lands here. One click creates the client, picks test towns inside their service area, and starts the audit." }),
+      h("p", { class: "sub small", text: "Requests sent from the earlier version of the home page. One click creates the client, picks test towns inside their service area, and starts the audit." }),
       fresh.length ? fresh.map((l) => h("div", { class: "list-item" },
         h("div", {},
           h("b", { style: "font-size:1.05rem;color:var(--ink)", text: l.business }),
@@ -241,12 +243,13 @@ async function renderClients() {
           h("button", { class: "btn", onclick: (e) => act(e, l, "convert", true), text: "Create client & run audit" }),
           h("button", { class: "btn quiet", onclick: (e) => act(e, l, "convert", false), text: "Create only" }),
           h("button", { class: "btn quiet", onclick: (e) => act(e, l, "dismiss"), text: "Dismiss" }))))
-        : h("p", { class: "muted", text: "No new requests." })),
+        : null),
     recheckInbox(rk),
     h("div", { class: "card" },
       h("h2", { text: "Clients" }),
       clients.length ? clients.map((c) => h("div", { class: "list-item" },
-        h("div", {}, h("a", { href: `#client/${c.id}`, style: "font-weight:700;font-size:1.05rem", text: c.business }), h("div", { class: "muted small", text: `${c.trade} · ${c.town}, ${c.state} · ${c.competitors.length} competitor${c.competitors.length === 1 ? "" : "s"}${c.tracking ? " · monthly tracking on" : ""}` })),
+        h("div", {}, h("a", { href: `#client/${c.id}`, style: "font-weight:700;font-size:1.05rem", text: c.business }), h("div", { class: "muted small", text: `${c.trade} · ${c.town}, ${c.state} · ${c.competitors.length} competitor${c.competitors.length === 1 ? "" : "s"}${c.tracking ? " · monthly tracking on" : ""}${c.billing ? ` · ${billingWords(c.billing)}` : ""}` }),
+          (c.asks || []).some((a) => a.status === "open") ? h("div", { class: "small", style: "color:var(--warn, #965700);font-weight:700;margin-top:2px", text: `${(c.asks || []).filter((a) => a.status === "open").length} request${(c.asks || []).filter((a) => a.status === "open").length === 1 ? "" : "s"} from the owner` }) : null),
         h("a", { class: "btn quiet", href: `#client/${c.id}`, text: "Open" })))
         : h("p", { class: "muted", text: "No clients yet." })),
     h("div", { class: "card" },
@@ -326,9 +329,34 @@ const siteName = (d) => SITE_NAMES[d] || d;
 // first. Each step gets real numbers, a timeframe, the owner's part when there is one, and tracked items.
 const ENG_SHORT = { openai: "ChatGPT", gemini: "Gemini", perplexity: "Perplexity", anthropic: "Claude", aimode: "Google AI Mode" };
 const WHEN_ORDER = ["This week", "This month", "Next month", "Ongoing", "Monthly"];
-function ownerPlan(audit, s, site) {
+// What a plan step covers. Steps saved before steps had keys are recognized by their wording,
+// including the older suggestions (a separate "weakest platform" step, for example).
+const STEP_PATTERNS = [
+  [/^get a website/, "website"], [/^let every ai assistant/, "crawler"],
+  [/^fix the wrong phone|^make sure ai knows exactly/, "accuracy"],
+  [/^claim and complete your google|^get into chatgpt|^strengthen your google maps profile|^win google.s ai mode|^make sure claude finds/, "core-listings"],
+  [/^get listed and accurate on/, "cited-sites"], [/^add pages for/, "towns"], [/^give perplexity pages/, "pages-perplexity"],
+  [/^make your emergency|^make your hours and emergency/, "group:Need it now"], [/^make sure ai knows when you.re open/, "group:Right now"],
+  [/^add a page for each job/, "group:A specific job"], [/^name the dishes/, "group:A specific craving"],
+  [/^publish price ranges/, "group:Price and trust"], [/^answer the planning questions/, "group:Plans and logistics"],
+  [/^get listed on efficiency maine|^answer the maine questions/, "group:Only in Maine"], [/^build your statewide reputation/, "group:Anywhere in Maine"],
+  [/^build the reputation behind/, "group:Price and trust"],
+  [/^publish your hours/, "hours"], [/^tune up your website|^add business details in the format/, "tune"], [/^grow your reviews/, "reviews"], [/^get into local press/, "press"],
+  [/^re-measure|^re-check every month/, "monthly"]
+];
+function stepKey(p) {
+  const t = String(p.title || "").trim().toLowerCase();
+  for (const [re, k] of STEP_PATTERNS) if (re.test(t)) return k;
+  return "title:" + t;
+}
+const stepKeys = (p) => (p.keys && p.keys.length ? p.keys : [stepKey(p)]);
+
+function ownerPlan(audit, s, site, opts) {
+  opts = opts || {};
   const steps = [];
-  const add = (o) => steps.push({ when: "This month", type: "other", extra: [], goals: {}, ...o });
+  // Each step carries keys naming what it covers, so "Suggest" never adds the same step twice,
+  // even after the numbers (and so the wording) change from one audit to the next.
+  const add = (o) => { const st = { when: "This month", type: "other", extra: [], goals: {}, how: [], ...o }; st.keys = st.keys || [stepKey(st)]; steps.push(st); return st; };
   const track = (label, bench) => ({ label, you: "Checking", bench, met: null });
   const you = s.entities.find((e) => e.isClient), comps = s.entities.filter((e) => !e.isClient);
   const c = audit.client || {}, biz = c.business || "you", tradeWord = String(c.trade || "business").toLowerCase();
@@ -340,65 +368,95 @@ function ownerPlan(audit, s, site) {
   const ahead = (a, b) => !!(a?.n && b?.n && a.low > b.high);           // a clearly ahead of b
   const leaderBy = (map, key) => comps.map((e) => ({ e, r: e[map]?.[key] })).filter((x) => x.r?.n).sort((a, b) => b.r.rate - a.r.rate)[0];
   const leader = comps.map((e) => ({ e, r: e.overall })).filter((x) => x.r?.n).sort((a, b) => b.r.rate - a.r.rate)[0];
-  const qFor = (group) => (s.questions.find((q) => q.group === group) || {}).text;
+  // The question to quote for a group: the one where they did worst.
+  // How to do each kind of step, in short numbered steps an owner can follow without us.
+  const tradeCap = tradeWord.replace(/^./, (m) => m.toUpperCase());
+  const CHECK = "When it’s done, press “Check website and Google” at the top of your plan to see it pass.";
+  const HOW = {
+    website: ["Pick a website builder (Squarespace, Wix or WordPress) or a local web designer.", "Make a page for each service and each town you want work from, in plain words.", "Put your business name, phone, service area and hours on every page as text, not inside an image.", "When it’s live, add the address under “Your business details” below your plan, then press “Check website and Google”."],
+    crawler: ["Forward this to whoever built or hosts your website: “Please make sure our robots.txt file and our firewall or CDN allow these crawlers: OAI-SearchBot, ChatGPT-User, PerplexityBot, Perplexity-User, Claude-SearchBot, Claude-User, Googlebot, bingbot and Applebot.”", "If most of your homepage text only shows after scripts run, ask them to make the main text load as plain HTML too.", CHECK],
+    phone: ["Search the wrong number on Google with quotes around it, and write down every site that shows it.", "Fix it on Google Business Profile, Bing Places, Apple Business Connect and Yelp first.", "Then fix each directory from your search. Most have an “edit” or “claim this business” link.", "Make sure your own website shows the right number as text.", "Tick this step, then use Quick look to see what AI says now. Listings can take a few weeks to catch up."],
+    match: ["Decide the exact name, address and phone you’ll use everywhere, down to “Co.” or “Company”.", "Update Google Business Profile, Bing Places, Apple Business Connect and Yelp to match it exactly.", "Update your website and Facebook page to match.", "Tick this step, then use Quick look to see whether AI recognizes you by name."],
+    core: ["Google: go to business.google.com, find your business, and claim or verify it. Fill in every service, your service area, hours and photos.", "Bing: go to bingplaces.com and add your business. It can import your Google profile in one step.", "Apple: go to businessconnect.apple.com and claim your place, so Siri and Apple Maps show it.", "Yelp: go to biz.yelp.com and claim your page. Add services, hours and photos.", "Use exactly the same name, address and phone on all four.", "Tick each benchmark below as you finish it."],
+    cited: ["On each site, search for your business first: there may already be a page you can claim.", "Claim it or create a profile. Most let you list for free; you don’t need a paid plan to be listed.", "Use the same name, address, phone and hours as your Google profile.", "Add your services and the towns you serve."],
+    towns: (towns) => [`Add one page per town to your website, titled like “${tradeCap} in ${towns[0] || "your town"}, Maine”.`, "On each page, describe two or three real jobs you did there, with photos.", "Link to each town page from your home page or menu.", "Add the same towns to your service area in Google Business Profile.", CHECK],
+    jobs: ["Make a page for each job, named the way customers ask for it.", "Show real local projects with a photo and a line or two about each.", "Answer what customers ask: roughly what it costs, how long it takes, and when you can start.", "Link to each page from your home page or menu."],
+    hours: ["Put your hours on your website as text, on the home page or a contact page.", "Set the same hours on Google, Bing, Apple and Yelp, and add holiday and seasonal hours.", "If you take emergency or same-day calls, say so in those words on your site and in your Google profile description.", CHECK],
+    price: ["Add a short page with typical price ranges for your most common jobs.", "List what makes a job cost more or less.", "Say how to get an exact quote from you."],
+    menu: ["Put your menu on your website as text, not only as a PDF or photo.", "Name your standout dishes and describe them in a sentence.", "Add the menu link to your Google Business Profile."],
+    logistics: ["On your website, answer the questions people ask before they come: parking, reservations, kids, accessibility.", "Add what you can to your Google Business Profile, using its attributes and description."],
+    emaine: ["Go to efficiencymaine.com and look for how contractors become registered vendors for the work you do.", "If you qualify, register and get listed.", "Check that the name, phone and service area on that listing match your other listings."],
+    tune: ["Send the list above to whoever manages your website.", "For schema, ask for “LocalBusiness” schema markup with your name, address, phone and hours.", CHECK],
+    reviews: ["Get your review link: in your Google Business Profile, choose “Ask for reviews” and copy the link.", "The day you finish a job, text the customer a thank-you with the link. A ready-made message is under “Coming up” on your Overview.", "Ask every customer, and don’t offer anything in return.", "Reply to every review, good or bad, in a sentence or two."],
+    press: ["Pick two or three projects with a story: unusual, for a local landmark, or for a good cause.", "Email a short note with a photo to your local paper or community news site.", "Look up your area’s “best of” awards and your chamber of commerce, and enter or join.", "Add awards and memberships to your website and your Google profile."],
+    state: ["Ask customers from other parts of Maine to mention their town in their review.", "Pitch a statewide outlet with a project worth covering.", "List the regions you serve on your website and your Google profile."],
+    perplexity: ["Make a clear page for each service and each town you serve.", "Use plain headings that match how customers ask, and put the answer in the first lines.", CHECK]
+  };
+  const qFor = (group) => { const qs = s.questions.filter((q) => q.group === group), w = qs.map((q) => ({ q, r: you.byQuestion?.[q.id] })).filter((x) => x.r?.n).sort((a, b) => a.r.rate - b.r.rate)[0]; return (w ? w.q : qs[0] || {}).text; };
+  const fmtPhone = (d) => String(d || "").replace(/^(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
   const list = (a) => (a.length < 3 ? a.join(" and ") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]);
   const yr = you.overall;
 
   // 1. No website, or AI can't read it
-  if (f("No website") || (!c.website && !site?.domain)) add({ title: "Get a website AI can read", when: "This month", type: "website",
-    detail: "Without a website, AI tools only have directories and your Google listing to go on. We’ll build a fast, simple site with a page for each thing you do and the towns you serve." });
+  if ((f("No website") || (!c.website && !site?.domain)) && !s.ownDomain) add({ keys: ["website"], how: HOW.website, title: "Get a website AI can read", when: "This month", type: "website",
+    detail: "Without a website, AI tools only have directories and your Google listing to go on. A simple site with a page for each thing you do and the towns you serve is enough to start. Squarespace, Wix or a local web designer can all set one up." });
   const blockers = [f("AI crawlers are turned away") && "your website’s security settings turn away at least one AI assistant’s crawler",
     f("robots.txt blocks") && "your robots.txt file tells some AI search crawlers to stay out",
     f("Homepage is set to noindex") && "your homepage tells search engines not to list it",
     f("Homepage did not load normally") && "your homepage didn’t load normally when we checked",
     f("Very little readable text") && "most of your homepage text only appears after scripts run, which many AI crawlers skip"].filter(Boolean);
-  if (blockers.length) add({ title: "Let every AI assistant read your website", when: "This week", type: "crawler",
-    detail: `Right now ${list(blockers)}. Until that’s fixed, assistants like ChatGPT and Perplexity can’t learn about you from your own site. We’ll change the settings; nothing changes for your visitors.` });
+  if (blockers.length) add({ keys: ["crawler"], how: HOW.crawler, title: "Let every AI assistant read your website", when: "This week", type: "crawler",
+    detail: `Right now ${list(blockers)}. Until that’s fixed, assistants like ChatGPT and Perplexity can’t learn about you from your own site. Whoever built or hosts your website can change these settings; nothing changes for your visitors.` });
 
   // 2. Wrong details, and whether AI knows who you are
-  const ph = s.accuracy?.phoneIssues || [];
-  if (ph.length) {
-    const engs = [...new Set(ph.map((x) => ENG_SHORT[x.engine] || x.engine))], nums = [...new Set(ph.flatMap((x) => x.phones || []))].slice(0, 3).map((d) => d.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3"));
-    add({ title: "Fix the wrong phone number AI is giving out", when: "This week", type: "accuracy",
-      detail: `In ${ph.length} answer${ph.length === 1 ? "" : "s"} from ${list(engs)}, AI gave out ${nums.length ? list(nums) : "a number"} for ${biz}, which isn’t your number. A customer who calls it never reaches you. We’ll find the old listing it comes from and correct it at the source.` });
+  const ph = s.accuracy?.phoneIssues || [], bn = s.accuracy?.brandedNamed;
+  const engsP = [...new Set(ph.map((x) => ENG_SHORT[x.engine] || x.engine))], nums = [...new Set(ph.flatMap((x) => x.phones || []))].slice(0, 3).map((d) => d.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3"));
+  const nPh = s.accuracy?.phoneIssueCount || ph.length, onFile = fmtPhone(s.accuracy?.factsPhone);
+  const right = !onFile ? "" : s.accuracy?.phoneSource === "google" ? `Your Google listing gives ${onFile}, but in` : `Your number is ${onFile}, but in`;
+  const phoneTxt = ph.length ? `${right || "In"} ${nPh} answer${nPh === 1 ? "" : "s"} from ${list(engsP)}, AI gave out ${nums.length ? list(nums) : "a different number"} for ${biz}${onFile ? " instead" : ""}. A customer who calls the wrong number never reaches you.` : "";
+  const nameTxt = bn?.n && bn.rate < 0.9 ? `When customers asked about ${biz} by name, AI clearly recognized you in only ${ofN(bn)} answers.` : "";
+  if (phoneTxt && nameTxt) add({ keys: ["accuracy"], how: HOW.phone, title: "Fix the wrong phone number and make your details match everywhere", when: "This week", type: "accuracy",
+    detail: `${phoneTxt} ${nameTxt} Both come from listings that disagree about your name, address, or phone, so AI isn’t sure which business is you. Find the old listings, correct them at the source, and make your details match everywhere: start with Google, Bing, Apple Maps and Yelp, then directories like the BBB and Angi.` });
+  else if (phoneTxt) add({ keys: ["accuracy"], how: HOW.phone, title: "Fix the wrong phone number AI is giving out", when: "This week", type: "accuracy",
+    detail: `${phoneTxt} Search the wrong number on Google to see which listings show it, then correct each one at the source, starting with Google, Bing, Apple Maps and Yelp.` });
+  else if (nameTxt) add({ keys: ["accuracy"], how: HOW.match, title: "Make sure AI knows exactly who you are", when: "This week", type: "accuracy",
+    detail: `${nameTxt} That usually means your name, address, and phone don’t match from one listing to the next, so AI isn’t sure which business is you. Make them match exactly on every listing, starting with Google, Bing, Apple Maps and Yelp.` });
+
+  // The platform where they're weakest. Rather than a step of its own (which would repeat the
+  // listings, reviews, or pages steps), it's called out inside the step that moves it.
+  const engs = Object.entries(you.byEngine || {}).filter(([, r]) => r?.n).sort((a, b) => a[1].rate - b[1].rate);
+  const [weak, wr] = engs[0] || [];
+  let W = null, weakTxt = "";
+  if (weak && engs.length > 1 && (wr.rate === 0 || wr.rate < (yr.rate || 0) * 0.5)) {
+    const lb = leaderBy("byEngine", weak);
+    weakTxt = `${ENG_SHORT[weak]} is your weakest platform: it named you in ${ofN(wr)} answers${lb && lb.r.rate > wr.rate ? `; ${lb.e.name} was named in ${lb.r.k}` : ""}.`;
+    W = {
+      openai: { home: "core", note: "ChatGPT finds local businesses largely through Bing’s search index and sites like Yelp, and it can’t see your Google reviews, so Bing and Yelp matter most for it. Submitting your site to Bing Webmaster Tools (free) helps too.", extra: [track("Bing Webmaster Tools", "Site submitted and indexed")] },
+      gemini: { home: "core", note: "Gemini answers from Google Maps: your categories, services, hours, photos, and reviews, so your Google profile matters most for it. Fill in every service and category, and add fresh photos.", extra: [track("Google Maps photos", "20+ recent photos")] },
+      aimode: { home: "core", note: "Google’s AI Mode leans on your Google Business Profile and your Google reviews, so the Google profile in this step and the reviews step are what move it.", extra: [] },
+      anthropic: { home: "core", note: "Claude searches the web and reads the directories it finds; when they disagree, it tends to leave you out, so making your details match is what helps most.", extra: [] },
+      perplexity: { home: "pages", note: "Perplexity cites businesses’ own web pages more than any other assistant, so these pages give it something of yours to quote." }
+    }[weak] || null;
   }
-  const bn = s.accuracy?.brandedNamed;
-  if (bn?.n && bn.rate < 0.9) add({ title: "Make sure AI knows exactly who you are", when: "This week", type: "accuracy",
-    detail: `When customers asked about ${biz} by name, AI clearly recognized you in only ${ofN(bn)} answers. That usually means your name, address, and phone don’t match from one listing to the next, so AI isn’t sure which business is you. We’ll make them match everywhere.` });
 
   // 3. The core profiles every assistant reads
-  const gem = you.byEngine?.gemini, gpt = you.byEngine?.openai;
-  add({ title: "Claim and complete your Google, Bing, Apple, and Yelp listings", when: "This week", type: "listings",
-    detail: `Each assistant leans on different listings: Gemini and Google’s AI read your Google Business Profile${gem?.n ? ` (Gemini named you in ${ofN(gem)} answers)` : ""}; ChatGPT and Microsoft Copilot lean on Bing and Yelp${gpt?.n ? ` (ChatGPT named you in ${ofN(gpt)})` : ""}; Siri uses Apple Maps with Yelp’s stars. We’ll claim each one, fill in every field, and make the details match. Your part: approve the verification codes (a text, call, or postcard) when they arrive.`,
-    extra: [track("Google Business Profile", "Claimed and complete, with photos and hours"), track("Bing Places", "Claimed and matching Google"), track("Apple Business Connect", "Claimed and matching Google"), track("Yelp", "Claimed and complete")] });
+  const gem = you.byEngine?.gemini, gpt = you.byEngine?.openai, core = W?.home === "core";
+  add({ keys: ["core-listings"], how: HOW.core, title: "Claim and complete your Google, Bing, Apple, and Yelp listings", when: "This week", type: "listings",
+    detail: `${core ? `${weakTxt} ${W.note} ` : ""}Each assistant leans on different listings: Gemini and Google’s AI read your Google Business Profile${gem?.n ? ` (Gemini named you in ${ofN(gem)} answers)` : ""}; ChatGPT and Microsoft Copilot lean on Bing and Yelp${gpt?.n ? ` (ChatGPT named you in ${ofN(gpt)})` : ""}; Siri uses Apple Maps with Yelp’s stars. Claim each one, fill in every field, and make the details match. Each one asks you to verify that the business is yours, by text, call, video or postcard.`,
+    extra: [track("Google Business Profile", "Claimed and complete, with photos and hours"), track("Bing Places", "Claimed and matching Google"), track("Apple Business Connect", "Claimed and matching Google"), track("Yelp", "Claimed and complete"), ...(core ? W.extra : [])] });
 
   // 4. The sites AI cites most for this kind of business
   const covered = /google|bing|apple|yelp/;
   const top = s.sources.filter((x) => x.domain !== site?.domain && x.domain !== "google maps" && !covered.test(x.domain)).slice(0, 3);
-  if (top.length) add({ title: `Get listed and accurate on ${list(top.map((x) => siteName(x.domain)))}`, when: "This month", type: "listings",
+  if (top.length) add({ keys: ["cited-sites"], how: HOW.cited, title: `Get listed and accurate on ${list(top.map((x) => siteName(x.domain)))}`, when: "This month", type: "listings",
     detail: `When customers asked about ${trades} near you, AI cited ${list(top.map((x) => `${siteName(x.domain)} in ${pct(x.share)} of answers`))}. Being on these sites, with the same name, address, phone, and hours as everywhere else, is the most direct way to be named.${leader && ahead(leader.r, yr) ? ` ${leader.e.name} is named in ${share(leader.r)} of answers to your ${share(yr)}, so it’s worth checking which of these it’s on.` : ""}`,
     extra: top.map((x) => track(siteName(x.domain), "Listed, details match")) });
-
-  // 5. The platform where they're weakest
-  const engs = Object.entries(you.byEngine || {}).filter(([, r]) => r?.n).sort((a, b) => a[1].rate - b[1].rate);
-  const [weak, wr] = engs[0] || [];
-  if (weak && engs.length > 1 && (wr.rate === 0 || wr.rate < (yr.rate || 0) * 0.5)) {
-    const lb = leaderBy("byEngine", weak), vs = lb && lb.r.rate > wr.rate ? ` ${lb.e.name} was named in ${ofN(lb.r)}.` : "";
-    const P = {
-      openai: ["Get into ChatGPT’s sources", "listings", "ChatGPT finds local businesses largely through Bing’s search index and sites like Yelp, and it can’t see your Google reviews. We’ll submit your site to Bing Webmaster Tools and build up your Yelp profile.", [track("Bing Webmaster Tools", "Site submitted and indexed")]],
-      gemini: ["Strengthen your Google Maps profile for Gemini", "listings", "Gemini answers from Google Maps: your categories, services, hours, photos, and reviews. We’ll fill in every service and category, add fresh photos, and reply to reviews.", [track("Google Maps photos", "20+ recent photos")]],
-      perplexity: ["Give Perplexity pages of yours to quote", "towns", "Perplexity cites businesses’ own web pages more than any other assistant. A clear page for each service and town gives it something of yours to quote.", []],
-      anthropic: ["Make sure Claude finds the same details everywhere", "listings", "Claude searches the web and reads the directories it finds. When those disagree with each other, it tends to leave you out. We’ll clean up the directories that list you.", []],
-      aimode: ["Win Google’s AI Mode with your Google profile and reviews", "reviews", "Google’s AI Mode leans on your Google Business Profile and Google reviews. Complete details and a steady stream of reviews are what move it.", []]
-    }[weak];
-    if (P) add({ title: P[0], when: "This month", type: P[1], detail: `${ENG_SHORT[weak]} is your weakest platform: it named you in ${ofN(wr)} answers.${vs} ${P[2]}`, extra: P[3] });
-  }
 
   // 6. Towns: missing from the website, or where competitors win
   const missingF = f("Some towns you serve"), missing = missingF ? String(missingF.detail || "").split(/,\s*/).filter(Boolean) : [];
   const weakTowns = (s.locations || []).slice(1).filter((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n && (r.rate < 0.15 || (lb && ahead(lb.r, r))); });
   const townList = [...new Set([...missing, ...weakTowns])].slice(0, 3);
-  if (townList.length) add({ title: `Add pages for ${list(townList)}`, when: "This month", type: "towns",
+  const townStep = !townList.length ? null : add({ keys: ["towns"], how: HOW.towns(townList), title: `Add pages for ${list(townList)}`, when: "This month", type: "towns",
     detail: townList.map((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n ? `For customers in ${t}, AI named you in ${ofN(r)} answers${lb && lb.r.rate > r.rate ? `; ${lb.e.name} was named in ${lb.r.k}` : ""}.${missing.includes(t) ? ` Your website doesn’t mention ${t} yet.` : ""}` : `Your website doesn’t mention ${t} yet.`; }).join(" ") +
       " AI looks for pages that clearly name the town and the work. A real page per town, with local jobs and photos, gives it something of yours to cite." });
 
@@ -406,31 +464,82 @@ function ownerPlan(audit, s, site) {
   const food = (s.questions || []).some((q) => q.id === "crave1");
   const em = /plumb|hvac|heat|air|electric|insulat|solar|energy|weather/.test(tradeWord);
   const G = {
-    "Need it now": ["Make your emergency and same-day service plain", "hours", "AI can only recommend you for urgent jobs if your website and listings say you take them, and when you’re open. We’ll spell out emergency and same-day service on your site and listings."],
-    "Right now": ["Make sure AI knows when you’re open", "hours", "“Open now” answers come from the hours AI can read. We’ll publish your hours everywhere and keep holiday and seasonal hours current."],
+    "Need it now": ["Make your emergency and same-day service plain", "hours", "AI can only recommend you for urgent jobs if your website and listings say you take them, and when you’re open. Spell out emergency and same-day service on your site and listings, in those words."],
+    "Right now": ["Make sure AI knows when you’re open", "hours", "“Open now” answers come from the hours AI can read. Publish your hours everywhere, and keep holiday and seasonal hours current."],
     "A specific job": ["Add a page for each job you want more of", "towns", "AI quotes pages that name the job. A page per service, with real local projects and photos, gives it something to cite when customers ask about that work."],
-    "A specific craving": ["Name the dishes people ask about", "towns", "AI repeats what menus and reviews say plainly. We’ll put your menu on a real web page and name your standout dishes."],
+    "A specific craving": ["Name the dishes people ask about", "towns", "AI repeats what menus and reviews say plainly. Put your menu on a real web page (not just a PDF or a photo) and name your standout dishes."],
     "Price and trust": ["Publish price ranges and what affects the cost", "other", "AI tends to recommend businesses that answer the price question. A short page with typical ranges and what changes them helps customers and AI alike."],
-    "Plans and logistics": ["Answer the planning questions: parking, kids, reservations", "other", "Diners ask AI about parking, kids, and reservations. We’ll make sure your site and listings answer each one."],
-    "Only in Maine": em ? ["Get listed on Efficiency Maine’s vendor locator", "listings", "Efficiency Maine’s list of registered vendors is the state’s own directory for rebate-eligible work, and AI cites it for these questions. We’ll get you registered and listed."]
-      : ["Answer the Maine questions on your site", "towns", "Maine-specific questions, like the seasonal ones, go to businesses whose pages talk about them. We’ll add short pages that answer them."],
+    "Plans and logistics": ["Answer the planning questions: parking, kids, reservations", "other", "Diners ask AI about parking, kids, and reservations. Make sure your site and listings answer each one."],
+    "Only in Maine": em ? ["Get listed on Efficiency Maine’s vendor locator", "listings", "Efficiency Maine’s list of registered vendors is the state’s own directory for rebate-eligible work, and AI cites it for these questions. Check whether you qualify as a registered vendor, and if you do, get listed."]
+      : ["Answer the Maine questions on your site", "towns", "Maine-specific questions, like the seasonal ones, go to businesses whose pages talk about them. Add short pages to your site that answer them."],
     "Anywhere in Maine": ["Build your statewide reputation", "press", "Statewide questions go to the businesses with the most reviews, press, and listings across Maine. Local press, awards, and reviews from customers all over the state are what move these."]
   };
   const gaps = Object.entries(you.byGroup || {}).filter(([g, r]) => G[g] && r?.n).map(([g, r]) => { const lb = leaderBy("byGroup", g); return { g, r, lb, gap: (lb ? lb.r.rate : 0.3) - r.rate }; })
-    .filter((x) => x.r.rate < 0.25 || (x.lb && ahead(x.lb.r, x.r))).sort((a, b) => b.gap - a.gap).slice(0, 3);
+    .filter((x) => x.r.rate < 0.25 || (x.lb && ahead(x.lb.r, x.r))).sort((a, b) => b.gap - a.gap);
+  // Up to three steps from the weakest kinds of questions; ones folded into another step don't count.
+  let hoursStep = null, pagesStep = null, trust = null, own = 0;
+  const used = [];
+  const PAGES = { "A specific job": "A page per service, with real local projects and photos, gives AI something to cite when customers ask about that work.",
+    "Only in Maine": "Seasonal and Maine-specific questions like these go to businesses whose pages talk about them, so short pages on your site that answer them help." };
+  // Merges into a step already in the plan are always made; a new step only while there are fewer than three.
   for (const x of gaps) {
-    const [title, type, why] = G[x.g], q = qFor(x.g);
-    const hoursToo = type === "hours" && f("Hours not found") ? " Your hours aren’t on your website yet either, so we’ll add them everywhere." : "";
-    add({ title, type, when: "This month", detail: `For questions like “${q}”, AI named you in ${ofN(x.r)} answers${x.lb && x.lb.r.rate > x.r.rate ? `; ${x.lb.e.name} was named in ${x.lb.r.k}` : ""}. ${why}${hoursToo}` });
+    let [title, type, why] = G[x.g], q = qFor(x.g);
+    // "Most trusted" is won by reputation (reviews, years, third-party praise), not a price page:
+    // it's folded into the reviews or press step below, whichever exists.
+    if (x.g === "Price and trust") {
+      const by = (id) => { const qq = s.questions.find((z) => z.group === x.g && z.id === id); return qq ? { q: qq, r: you.byQuestion?.[id], lb: leaderBy("byQuestion", id) } : null; };
+      const t = by("trusted"), pr = by("price");
+      if (t?.r?.n && (!pr?.r?.n || t.r.rate <= pr.r.rate)) {
+        used.push(x);
+        trust = { key: "group:" + x.g, text: `For “${t.q.text}”, AI named you in ${ofN(t.r)} answers${t.lb && t.lb.r.rate > t.r.rate ? `; ${t.lb.e.name} was named in ${t.lb.r.k}` : ""}. “Most trusted” answers go to the businesses with the most reviews, years in business, and outside praise, so this step moves those too.` };
+        continue;
+      }
+      if (pr) q = pr.q.text;
+    }
+    const found = `For questions like “${q}”, AI named you in ${ofN(x.r)} answers${x.lb && x.lb.r.rate > x.r.rate ? `; ${x.lb.e.name} was named in ${x.lb.r.k}` : ""}.`;
+    // Pages for the jobs customers ask about, including the Maine-specific ones, are one step
+    // (the town pages are their own step).
+    if (PAGES[x.g] && type === "towns") {
+      if (pagesStep) {
+        used.push(x);
+        pagesStep.detail += ` ${found} ${PAGES[x.g]}`;
+        pagesStep.keys.push("group:" + x.g); continue;
+      }
+      if (own >= 3) continue;
+      used.push(x);
+      pagesStep = add({ keys: ["group:" + x.g], how: HOW.jobs, title: "Add a page for each job customers ask about", type: "towns", when: "This month", detail: `${found} ${PAGES[x.g]}` });
+      own++; continue;
+    }
+    // Emergency service and opening hours are one fix: say it plainly, everywhere.
+    if (type === "hours" && hoursStep) {
+      used.push(x);
+      hoursStep.title = "Make your hours and emergency service plain everywhere";
+      hoursStep.detail += ` ${found} ${why}`;
+      hoursStep.keys.push("group:" + x.g); continue;
+    }
+    if (own >= 3) continue;
+    used.push(x);
+    const hoursToo = type === "hours" && f("Hours not found") ? " Your hours aren’t on your website yet either, so add them there too, and on every listing." : "";
+    const GH = { "Need it now": HOW.hours, "Right now": HOW.hours, "A specific craving": HOW.menu, "Price and trust": HOW.price, "Plans and logistics": HOW.logistics, "Only in Maine": em ? HOW.emaine : HOW.jobs, "Anywhere in Maine": HOW.state };
+    const st = add({ keys: ["group:" + x.g], how: GH[x.g] || [], title, type, when: "This month", detail: `${found} ${why}${hoursToo}` });
+    own++;
+    if (type === "hours") hoursStep = st;
+  }
+  // Perplexity, if it's the weakest platform, is moved by pages of their own.
+  if (W?.home === "pages") {
+    const pages = steps.find((x) => x.type === "towns");
+    if (pages) pages.detail += ` ${weakTxt} ${W.note}`;
+    else add({ keys: ["pages-perplexity"], how: HOW.perplexity, title: "Give Perplexity pages of yours to quote", type: "towns", when: "This month",
+      detail: `${weakTxt} Perplexity cites businesses’ own web pages more than any other assistant. A clear page for each service and town gives it something of yours to quote.` });
   }
 
   // 8. Website housekeeping
-  if (f("Hours not found") && !gaps.some((x) => G[x.g][1] === "hours")) add({ title: "Publish your hours everywhere", when: "This week", type: "hours",
-    detail: "AI answers “who’s open now?” from the hours it can read, and it couldn’t find yours on your website. We’ll put them on your site and match them on every listing." });
+  if (f("Hours not found") && !used.some((x) => G[x.g][1] === "hours")) add({ keys: ["hours"], how: HOW.hours, title: "Publish your hours everywhere", when: "This week", type: "hours",
+    detail: "AI answers “who’s open now?” from the hours it can read, and it couldn’t find yours on your website. Put them on your site in plain text, and match them on every listing." });
   const tune = [f("No business schema") && "add business details in the format AI reads (schema markup)", f("Some schema markup is broken") && "repair broken schema markup",
     f("Phone number not found") && "put your phone number in plain text", f("Missing page title") && "add a page title", f("Missing meta description") && "add a page description for search results",
     f("No sitemap") && "add a sitemap so new pages get found"].filter(Boolean);
-  if (tune.length) add({ title: "Tune up your website for AI", when: "This month", type: tune.length === 1 && f("No business schema") ? "schema" : "website",
+  if (tune.length) add({ keys: ["tune"], how: HOW.tune, title: "Tune up your website for AI", when: "This month", type: tune.length === 1 && f("No business schema") ? "schema" : "website",
     detail: `Small fixes that help AI read your details correctly: ${list(tune)}. None of it changes how your site looks.` });
 
   // 9. Reviews against the leader
@@ -440,18 +549,25 @@ function ownerPlan(audit, s, site) {
     // A goal he can actually reach in four months: about 10 new reviews a month, never past 80% of the leader.
     const target = Math.max((mine.reviews || 0) + 15, Math.min((mine.reviews || 0) + 40, lrev ? Math.round(lrev.p.reviews * 0.8) : 50));
     const by = new Date(Date.now() + 120 * 864e5).toLocaleDateString(undefined, { month: "long" });
-    add({ title: "Grow your reviews, every job, every week", when: "Ongoing", type: "reviews",
-      detail: `${mine.reviews != null ? `You have ${mine.reviews} Google reviews${mine.rating ? ` at ${mine.rating}★` : ""}` : "AI leans hardest on review count and rating"}${lrev && mine.reviews != null ? `; ${lrev.e.name} has ${lrev.p.reviews}` : ""}. Review count and rating are the clearest pattern in who AI recommends, and ChatGPT also reads Yelp. We’ll set up a simple, rule-following review request. Your part: send it to every customer after the job.`,
+    add({ keys: ["reviews"], how: HOW.reviews, title: "Grow your reviews, every job, every week", when: "Ongoing", type: "reviews",
+      detail: `${mine.reviews != null ? `You have ${mine.reviews} Google reviews${mine.rating ? ` at ${mine.rating}★` : ""}` : "AI leans hardest on review count and rating"}${lrev && mine.reviews != null ? `; ${lrev.e.name} has ${lrev.p.reviews}` : ""}. Review count and rating are the clearest pattern in who AI recommends, and ChatGPT also reads Yelp. Ask every customer for a review after the job: a short text with a direct link to your Google review page works best. Ask every customer, not just the happy ones, and don’t offer anything in return: asking selectively and offering rewards both break Google’s rules.`,
       goals: { "reviews.count": `${Math.ceil(target / 5) * 5} by ${by}`, ...(mine.rating != null && mine.rating < 4.7 ? { "reviews.rating": "4.7★ or higher" } : {}) } });
   }
 
   // 10. Named, but rarely first
   const fr = you.first;
-  if ((yr.rate || 0) >= 0.1 && fr?.n && fr.rate < (yr.rate || 0) * 0.5 && !gaps.some((x) => x.g === "Anywhere in Maine"))
-    add({ title: "Get into local press and “best of” lists", when: "Next month", type: "press",
-      detail: `AI names you in ${share(yr)} of answers but puts you first in only ${share(fr)}. The business named first usually has third-party praise: local news, awards, chamber and “best of” lists. We’ll pitch you to local writers and nominate you for the next rounds.` });
+  if ((yr.rate || 0) >= 0.1 && fr?.n && fr.rate < (yr.rate || 0) * 0.5 && !used.some((x) => x.g === "Anywhere in Maine"))
+    add({ keys: ["press"], how: HOW.press, title: "Get into local press and “best of” lists", when: "Next month", type: "press",
+      detail: `AI names you in ${share(yr)} of answers but puts you first in only ${share(fr)}. The business named first usually has third-party praise: local news, awards, chamber and “best of” lists. Send local writers a short note about a project worth covering, and enter the next round of local “best of” awards.` });
+  if (trust) {
+    const home = steps.find((x) => x.type === "reviews") || steps.find((x) => x.type === "press");
+    if (home) { home.detail += " " + trust.text; home.keys.push(trust.key); }
+    else add({ keys: [trust.key], how: HOW.reviews, title: "Build the reputation behind “most trusted”", when: "Next month", type: "press",
+      detail: trust.text.replace(", so this step moves those too.", ". Make sure yours show everywhere AI looks: reviews on Google and Yelp, your years in business on every listing, and local press and awards.") });
+  }
 
-  add({ title: "Re-measure every month", when: "Monthly", type: "other",
+  // Only for owners measured every month (the monthly plan, or pilots you measure by hand).
+  if (opts.monthly) add({ keys: ["monthly"], title: "Re-measure every month", when: "Monthly", type: "other",
     detail: `On the 1st we ask the same ${s.questions.length} questions again, from the same towns, and show you exactly what changed, with each finished step marked on your chart.` });
   return steps.sort((a, b) => WHEN_ORDER.indexOf(a.when) - WHEN_ORDER.indexOf(b.when));
 }
@@ -497,6 +613,9 @@ async function renderClient(id) {
       statewide ? h("p", { class: "small", style: "margin:-4px 0 12px;color:var(--muted)", text: `Statewide client: 2 of the questions ask about all of Maine (“Who’s the best ${String(c.trade || "business").toLowerCase()} in Maine?”). Pick target towns spread across the state, for example Portland, Bangor and Augusta, so the towns cover the area he serves.` }) : null,
       h("div", { class: "grid2" }, h("div", {}, engChecks), h("div", {}, h("label", { text: "Sampling" }), runs, h("div", { style: "height:8px" }), h("label", { text: "Locations" }), locs)),
       est, h("button", { class: "btn", onclick: start, text: "Start audit" }), err),
+    signupCard(c, audits),
+    asksCard(c),
+    quickCard(c),
     dashboardCard(c, done.length > 0),
     recheckCard(c, rk, audits),
     ownerUpdatesCard(c, nt),
@@ -676,6 +795,148 @@ function ownerUpdatesCard(c, nt) {
   return h("div", { class: "card" }, h("h2", { text: "Owner updates and analytics" }), wrap);
 }
 
+// A short, ready-to-send note to go with the dashboard link (by text or email). The link goes
+// last, on its own line: iPhones only show the preview card for a link at the start or end.
+function introMessage(c, link) {
+  const near = c.town ? ` in and around ${c.town}` : "";
+  return `Here’s your private 207 Visibility dashboard for ${c.business}. ` +
+    `It shows how often ChatGPT, Gemini, Google’s AI and other assistants recommend you when customers${near} ask for a recommendation, who they name instead, and a step-by-step plan to change that. It updates on its own after each monthly check.\n\n` +
+    `There’s no password, so bookmark it and keep the link to yourself. Any questions, just reply.\n\n${link}`;
+}
+function introNote(c, link) {
+  const msg = introMessage(c, link);
+  return h("div", { style: "margin-top:12px" },
+    h("div", { class: "row" },
+      h("button", { class: "btn quiet", onclick: async (e) => { try { await navigator.clipboard.writeText(msg); e.target.textContent = "Copied"; } catch { e.target.textContent = "Select and copy below"; } }, text: "Copy message" }),
+      h("span", { class: "small muted", text: "A short note with the link at the end. Add a greeting at the top, and keep the link last so phones show the preview card." })),
+    h("details", { style: "margin-top:8px" }, h("summary", { class: "small", text: "See the message" }),
+      h("div", { class: "small", style: "white-space:pre-wrap;margin-top:8px;padding:12px 14px;border:1px solid var(--rule);border-radius:10px", text: msg })));
+}
+
+// Requests the owner sent from "What needs attention" on their dashboard ("Ask us about this").
+/* ---------- Self-serve sign-ups ---------- */
+const STAGE = { stuck: ["Audit stopped part-way", "p-fail"], review: ["Ready for review", "p-warn"], start: ["Paid · audit didn’t start", "p-fail"], requested: ["Waiting for payment", "p-info"], running: ["Paid · audit running", "p-info"],
+  checkout: ["At checkout", "p-info"], released: ["Released", "p-pass"], abandoned: ["Didn’t finish checkout", "p-warn"] };
+function billingWords(b) {
+  const plan = b.plan === "monthly" ? "monthly plan" : b.plan === "yearly" ? "yearly plan" : "audit only";
+  return `${plan}${b.status && b.status !== "paid" && b.status !== "active" ? ` (${b.status.replace("_", " ")})` : ""}${b.founding ? ", founding" : ""}`;
+}
+function signupsInbox(su) {
+  if (!su) return null;
+  const list = su.signups.filter((s) => s.status !== "dismissed");
+  const need = list.filter((s) => ["stuck", "review", "start", "requested"].includes(s.stage));
+  const live = list.filter((s) => ["running", "checkout"].includes(s.stage));
+  const past = list.filter((s) => ["released", "abandoned"].includes(s.stage)).slice(0, 8);
+  const st = su.settings;
+  const act = async (ev, s, action, ask) => {
+    if (ask && !confirm(ask)) return;
+    ev.target.disabled = true;
+    try { const r = await api("/api/signups", { method: "POST", body: JSON.stringify({ id: s.id, action }) }); if (r.auditKey) location.hash = `#audit/${encodeURIComponent(r.auditKey)}`; else route(); }
+    catch (e) { alert(e.message); ev.target.disabled = false; }
+  };
+  const row = (s) => h("div", { class: "list-item" },
+    h("div", {},
+      h("b", { style: "font-size:1.05rem;color:var(--ink)", text: s.business }), " ", h("span", { class: "pill " + STAGE[s.stage][1], text: STAGE[s.stage][0] }),
+      h("div", { class: "muted small", text: `${s.trade} · ${s.town}, ${s.state} · ${money(s.paidCents ?? s.priceCents)}${s.founding ? " (founding)" : ""} · ${dt(s.paidAt || s.createdAt)}` }),
+      h("div", { class: "small", text: [s.contact.name, s.contact.email, s.contact.phone].filter(Boolean).join(" · ") }),
+      s.stage === "stuck" ? h("div", { class: "small err", text: `Stopped: ${s.stuck.map((e) => (e === "site" ? "website check" : ENG_SHORT[e] || e)).join(", ")}. Open the audit to resume it, or finish without that platform.` }) : null,
+      s.short && s.stage === "review" ? h("div", { class: "small err", text: `Only ${s.short.got} of ${s.short.expected} questions got an answer. Open the audit and press Retry on each platform that came up short before you review it.` }) : null,
+      s.dup ? h("div", { class: "small err", text: `Heads up: ${s.dup} is already a client. This may be a second sign-up for the same business.` }) : null,
+      s.error ? h("div", { class: "small err", text: s.error }) : null),
+    h("div", { class: "row", style: "justify-content:flex-end" },
+      s.stage === "stuck" ? h("a", { class: "btn", href: `#audit/${encodeURIComponent(s.auditKey)}`, text: "Open the audit" }) : null,
+      s.stage === "review" ? h("a", { class: "btn", href: `#client/${s.clientId}`, text: "Review and release" }) : null,
+      ["running", "released"].includes(s.stage) && s.clientId ? h("a", { class: "btn quiet", href: `#client/${s.clientId}`, text: "Open" }) : null,
+      s.stage === "start" ? h("button", { class: "btn", onclick: (e) => act(e, s, "start"), text: "Start audit" }) : null,
+      s.stage === "requested" ? h("button", { class: "btn", onclick: (e) => act(e, s, "start", `Mark ${s.business} as paid (${money(s.priceCents)}) and start their audit?`), text: "Paid: start audit" }) : null,
+      ["requested", "abandoned"].includes(s.stage) ? h("button", { class: "btn quiet", onclick: (e) => act(e, s, "dismiss", `Dismiss ${s.business}?`), text: "Dismiss" }) : null));
+  const prices = `${money(st.auditCents)} audit · ${money(st.monthlyCents)} a month${st.yearlyCents ? ` · ${money(st.yearlyCents)} a year` : ""}${st.foundingSpots ? ` · founding: ${money(st.foundingAuditCents)} audit, ${money(st.foundingMonthlyCents)} a month, first ${st.foundingSpots}` : ""}`;
+  return h("div", { class: "card" + (need.length + (su.stopped || []).length ? " leads" : "") },
+    h("h2", { text: (su.stopped || []).length ? `Sign-ups and audits needing you (${need.length + su.stopped.length})` : need.length ? `Sign-ups needing you (${need.length})` : "Sign-ups" }),
+    h("p", { class: "sub small", text: `Owners sign up and pay at /start/. Each first audit waits here for you to review before the owner gets their link. Prices: ${prices}.` }),
+    h("div", { class: "row", style: "margin:-4px 0 10px" },
+      h("span", { class: "pill " + (st.mode === "stripe" ? "p-pass" : "p-warn"), text: st.mode === "stripe" ? "Stripe payments on" : "Stripe not set up: owners are told you’ll send a payment link" }),
+      h("span", { class: "pill " + (st.email ? "p-pass" : "p-warn"), text: st.email ? "Email sending on" : "Email not set up: alerts show only here" })),
+    need.length || live.length ? [...need, ...live].map(row) : h("p", { class: "muted", text: "Nothing waiting." }),
+    (su.stopped || []).map((a) => h("div", { class: "list-item" },
+      h("div", {}, h("b", { style: "color:var(--ink)", text: a.business }), " ", h("span", { class: "pill p-fail", text: "Monthly audit stopped part-way" }),
+        h("div", { class: "small err", text: `Stopped: ${a.stuck.map((e) => (e === "site" ? "website check" : ENG_SHORT[e] || e)).join(", ")}. Their dashboard keeps showing last month until this finishes.` })),
+      h("div", { class: "row", style: "justify-content:flex-end" }, h("a", { class: "btn", href: `#audit/${encodeURIComponent(a.key)}`, text: "Open the audit" })))),
+    past.length ? h("details", { style: "margin-top:8px" }, h("summary", { class: "small", text: `Recent (${past.length})` }), past.map(row)) : null);
+}
+function signupCard(c, audits) {
+  const b = c.billing;
+  if (!b) return null;
+  const first = audits.filter((a) => a.kind !== "recheck").sort((x, y) => x.createdAt.localeCompare(y.createdAt))[0];
+  const ready = !!first?.rates, planned = (c.plan || []).length > 0, email = c.notify?.email || "";
+  const out = h("div");
+  const release = async (ev) => {
+    const thin = first?.short ? `\n\nThis audit only got ${first.short.got} of ${first.short.expected} answers. Retry the platforms that came up short first, or the owner sees numbers built on too few answers.` : "";
+    const warn = thin + (planned ? "" : "\n\nTheir plan is empty, so the dashboard will say their plan is coming. Build it first with Suggest from latest audit, below.");
+    if (!confirm(`Email ${email || "the owner"} their dashboard link now?${warn}`)) return;
+    ev.target.disabled = true;
+    try {
+      const r = await api("/api/signups", { method: "POST", body: JSON.stringify({ action: "release", clientId: c.id }) });
+      if (r.sent) { out.replaceChildren(h("p", { class: "small", style: "color:var(--pass);font-weight:700", text: `Sent to ${r.to}.` })); setTimeout(route, 1200); return; }
+      const ta = h("textarea", { readonly: true, style: "width:100%;min-height:200px;margin-top:6px" }); ta.value = `Subject: ${r.subject}\n\n${r.text}`;
+      out.replaceChildren(h("p", { class: "small", style: "font-weight:700", text: r.status === "failed" ? `The email didn’t send (${r.error}). Send this yourself to ${r.to}:` : r.to ? `Email sending isn’t set up, so send this yourself to ${r.to}:` : "There’s no email on file, so send this yourself:" }), ta);
+      ev.target.disabled = false;
+    } catch (e) { alert(e.message); ev.target.disabled = false; }
+  };
+  const step = (ok, text, hint) => h("li", { style: "margin:4px 0" }, h("b", { style: `color:${ok ? "var(--pass)" : "var(--warn, #965700)"}`, text: ok ? "✓ " : "○ " }), text, hint && !ok ? h("span", { class: "small muted", text: ` · ${hint}` }) : null);
+  return h("div", { class: "card", style: b.releasedAt ? "" : "border-left:4px solid var(--warn, #965700)" },
+    h("h2", { text: b.releasedAt ? "Self-serve sign-up" : "Review, then release to the owner" }),
+    h("p", { class: "sub small", text: `${billingWords(b)}${b.auditCents != null ? ` · paid ${money(b.auditCents)}` : ""}${b.paidAt ? ` on ${dt(b.paidAt)}` : " · not paid yet"}${b.subscribedAt ? ` · plan since ${dt(b.subscribedAt)}` : ""}${b.endsAt ? ` · ends ${dt(b.endsAt)}` : ""}${b.releasedAt ? ` · released ${dt(b.releasedAt)}` : ""}` }),
+    b.releasedAt ? null : h("ol", { style: "margin:4px 0 12px;padding-left:20px", class: "small" },
+      step(ready, "First audit finished", "it releases once every platform is done"),
+      ready && first.short ? h("li", { style: "margin:4px 0", class: "err" }, h("b", { text: "! " }), `Only ${first.short.got} of ${first.short.expected} questions got an answer. Open the audit below and press Retry on each platform that came up short before you release it.`) : null,
+      h("li", { style: "margin:4px 0" }, h("b", { style: "color:var(--muted)", text: "• " }), "Check it yourself: real competitors, the right towns, phone flags that make sense", h("span", { class: "small muted", text: " · if you correct anything, use Re-check website and listings, then Re-score" })),
+      step(planned, "Plan built", "Suggest from latest audit, edit, Save plan"),
+      step(!!email, `Owner email: ${email || "missing"}`, "add it under Owner updates")),
+    h("div", { class: "row" },
+      h("button", { class: b.releasedAt ? "btn quiet" : "btn", disabled: ready ? null : true, onclick: release, text: b.releasedAt ? "Send the link again" : "Release to owner" })),
+    out);
+}
+
+// Quick checks the owner ran from their dashboard: what they found, and what's left this period.
+function quickCard(c) {
+  const box = h("div", { class: "card" }, h("h2", { text: "Quick checks from the dashboard" }), h("p", { class: "muted small", text: "Loading…" }));
+  api(`/api/quick?clientId=${encodeURIComponent(c.id)}`).then((q) => {
+    const a = q.allowance, st = q.settings;
+    const kids = [h("h2", { text: "Quick checks from the dashboard" }),
+      h("p", { class: "sub small", text: !st.enabled ? "Switched off (QUICK_CHECKS_ENABLED is false)." : `Quick looks: ${a.left} of ${a.total} left ${a.plan === "monthly" ? `this month (resets ${dt(a.resetsOn)})` : "from the audit"}. Website and Google checks left today: ${q.siteLeft}. Quick looks never change the score; website and Google checks confirm those benchmarks only.` })];
+    if (!q.items.length) kids.push(h("p", { class: "muted", text: "None yet." }));
+    else kids.push(...q.items.slice(0, 12).map((r) => h("div", { class: "list-item" },
+      h("div", {},
+        h("b", { text: r.kind === "site" ? "Website and Google check" : `Quick look: ${r.stepTitle || r.stepId}` }), " ",
+        h("span", { class: "pill " + (r.status === "done" ? (r.verdict?.tone === "pass" ? "p-pass" : r.verdict?.tone === "fail" ? "p-fail" : r.verdict ? "p-warn" : "p-info") : r.status === "failed" ? "p-fail" : "p-info"), text: r.status === "done" ? (r.verdict?.tone === "pass" ? "looks good" : r.verdict ? "not yet" : "done") : r.status }),
+        h("div", { class: "muted small", text: `${dt(r.createdAt)}${r.town ? ` · ${r.town}` : ""}${r.engines ? ` · ${r.engines.length} platforms, ${r.answerCount} answers` : ""}${r.estimatedCost ? ` · about $${r.estimatedCost.toFixed(2)}` : ""}${r.counted === false ? " · didn’t count" : ""}` }),
+        r.verdict?.line ? h("div", { class: "small", text: r.verdict.line }) : null,
+        r.kind === "site" && r.site?.findingsCount ? h("div", { class: "small", text: `${r.site.findingsCount.fail} serious and ${r.site.findingsCount.warn} minor website findings${r.places?.client ? `; Google ${r.places.client.rating}★, ${r.places.client.reviews} reviews` : ""}` }) : null,
+        r.error ? h("div", { class: "small err", text: r.error }) : null))));
+    box.replaceChildren(...kids);
+  }).catch((e) => box.replaceChildren(h("h2", { text: "Quick checks from the dashboard" }), h("p", { class: "small err", text: e.message })));
+  return box;
+}
+
+function asksCard(c) {
+  const open = (c.asks || []).filter((a) => a.status === "open");
+  if (!open.length) return null;
+  const done = async (a, btn) => {
+    btn.disabled = true;
+    const { clients } = await api("/api/clients"), fresh = clients.find((x) => x.id === c.id) || c;
+    const asks = (fresh.asks || []).map((x) => (x.id === a.id ? { ...x, status: "done", doneAt: new Date().toISOString() } : x));
+    await api("/api/clients", { method: "POST", body: JSON.stringify({ client: { ...fresh, asks } }) });
+    route();
+  };
+  return h("div", { class: "card", style: "border-left:4px solid var(--warn, #965700)" },
+    h("h2", { text: `${open.length === 1 ? "A request" : `${open.length} requests`} from ${c.business}` }),
+    h("p", { class: "sub small", text: "Sent from “What needs attention” on their dashboard. Get back to them, then mark it done; their dashboard stops showing it as asked." }),
+    open.map((a) => h("div", { class: "list-item" },
+      h("div", {}, h("b", { text: a.title }), h("div", { class: "small muted", text: `Asked ${new Date(a.at).toLocaleDateString(undefined, { month: "long", day: "numeric" })}` }),
+        a.note ? h("div", { class: "small", style: "margin-top:4px;max-width:70ch", text: a.note }) : null),
+      h("button", { class: "btn quiet tiny", onclick: (e) => done(a, e.target), text: "Mark done" }))));
+}
 function dashboardCard(c, ready) {
   if (!c.shareToken) return h("div", { class: "card" }, h("h2", { text: "Client dashboard" }),
     h("p", { class: "sub small", text: "This client doesn’t have a dashboard link yet." }),
@@ -688,7 +949,8 @@ function dashboardCard(c, ready) {
       h("input", { type: "text", value: link, readonly: true, style: "flex:1;min-width:260px", onfocus: (e) => e.target.select() }),
       h("button", { class: "btn quiet", onclick: async (e) => { try { await navigator.clipboard.writeText(link); e.target.textContent = "Copied"; } catch { e.target.textContent = "Select and copy"; } }, text: "Copy link" }),
       h("a", { class: "btn quiet", href: link, target: "_blank", rel: "noopener", text: "Open" }),
-      h("button", { class: "btn quiet", onclick: async () => { if (!confirm("Make a new link? The old one stops working.")) return; await api("/api/clients", { method: "POST", body: JSON.stringify({ client: { ...c, resetShare: true } }) }); route(); }, text: "New link" })));
+      h("button", { class: "btn quiet", onclick: async () => { if (!confirm("Make a new link? The old one stops working.")) return; await api("/api/clients", { method: "POST", body: JSON.stringify({ client: { ...c, resetShare: true } }) }); route(); }, text: "New link" })),
+    ready ? introNote(c, link) : null);
 }
 
 function townsCard(c) {
@@ -783,7 +1045,7 @@ function planCard(c, audits) {
   const wrap = h("div");
   const msg = h("span", { class: "small muted" });
   const draw = () => wrap.replaceChildren(...(plan.length ? plan.map((p, i) => h("div", { class: "plan-row" },
-    h("input", { type: "text", value: p.title, placeholder: "What we’ll do", oninput: (e) => { p.title = e.target.value; } }),
+    h("input", { type: "text", value: p.title, placeholder: "What to do", oninput: (e) => { p.title = e.target.value; } }),
     h("select", { onchange: (e) => { p.status = e.target.value; if (p.status === "done" && !p.doneAt) p.doneAt = new Date().toISOString().slice(0, 10); draw(); } },
       [["planned", "Planned"], ["doing", "In progress"], ["done", "Done"]].map(([v, l]) => h("option", { value: v, selected: p.status === v ? true : null, text: l }))),
     p.status === "done" ? h("input", { type: "date", value: p.doneAt || "", title: "Date completed", onchange: (e) => { p.doneAt = e.target.value; } })
@@ -792,7 +1054,8 @@ function planCard(c, audits) {
     h("label", { class: "small muted plan-kind" }, "Kind of work (drives the client’s simulator): ",
       h("select", { onchange: (e) => { p.type = e.target.value; draw(); } }, [["crawler","Let AI crawlers in"],["website","Website build"],["towns","Town or service pages"],["listings","Listings and directories"],["hours","Hours and details"],["accuracy","Fix wrong information"],["schema","Schema markup"],["reviews","Reviews"],["press","Press and awards"],["other","Other"]].map(([v, l]) => h("option", { value: v, selected: (p.type || "other") === v ? true : null, text: l }))),
       p.checkedByOwner ? h("span", { class: "pill p-info", style: "margin-left:8px", text: "checked off by client" }) : null),
-    h("textarea", { placeholder: "Plain-English detail your client sees", oninput: (e) => { p.detail = e.target.value; } }, p.detail || ""),
+    h("textarea", { placeholder: "Why it matters: what the audit found, in plain English", oninput: (e) => { p.detail = e.target.value; } }, p.detail || ""),
+    h("textarea", { placeholder: "How to do it: one short step per line (shown to the owner as a numbered list)", style: "min-height:88px", oninput: (e) => { p.how = e.target.value.split("\n").map((x) => x.trim()).filter(Boolean); } }, (p.how || []).join("\n")),
     checksList(p, draw),
     goalsEditor(p, draw)))
     : [h("p", { class: "muted", text: "No plan items yet. Suggest them from the latest audit, or add your own." })]));
@@ -801,13 +1064,19 @@ function planCard(c, audits) {
   const suggest = async () => {
     if (!latest) { msg.textContent = "Run an audit first."; return; }
     const d = await api("/api/audit?key=" + encodeURIComponent(latest.key));
-    const have = new Set(plan.map((p) => p.title.toLowerCase()));
-    let n = 0;
-    for (const st of ownerPlan(d.audit, d.summary, d.site)) {
-      if (have.has(st.title.toLowerCase())) continue;
-      plan.push({ title: st.title, detail: st.detail, when: st.when, type: st.type || "other", status: "planned", extra: st.extra || [], goals: st.goals || {} }); n++;
+    const have = new Set(plan.flatMap(stepKeys));
+    let n = 0, kept = 0;
+    for (const st of ownerPlan(d.audit, d.summary, d.site, { monthly: !!c.tracking })) {
+      if (st.keys.some((k) => have.has(k))) { kept++; continue; }
+      st.keys.forEach((k) => have.add(k));
+      plan.push({ title: st.title, detail: st.detail, how: st.how || [], when: st.when, type: st.type || "other", status: "planned", extra: st.extra || [], goals: st.goals || {}, keys: st.keys }); n++;
     }
-    draw(); msg.textContent = n ? `${n} steps added from the audit. Fill in anything marked “Checking”, edit the wording, then save.` : "Nothing new to add from this audit.";
+    const keptTxt = kept ? ` ${kept} already in the plan ${kept === 1 ? "was" : "were"} left as ${kept === 1 ? "it was" : "they were"}; to refresh one with this audit’s numbers, remove it and click Suggest again.` : "";
+    const site = !c.website && d.summary?.ownDomain ? ` AI cites ${d.summary.ownDomain.domain}. If that’s their website, add it to the business details above, save, then open the audit and click “Re-check website and listings” so the website gets scored.` : "";
+    // Keep the plan in time order: this week first, monthly last.
+    const rank = (p) => { const i = WHEN_ORDER.indexOf(p.when); return i < 0 ? 1 : i; };
+    plan.sort((a, b) => rank(a) - rank(b));
+    draw(); msg.textContent = n ? `${n} step${n === 1 ? "" : "s"} added from the audit. Fill in anything marked “Checking”, edit the wording, then save.${keptTxt}${site}` : `Nothing new to add from this audit.${keptTxt}${site}`;
   };
   // The owner can tick steps and benchmarks on their dashboard while this page is open. Before
   // saving, take the latest client record and keep the owner's changes that staff didn't touch here.
@@ -878,7 +1147,7 @@ function updateRow(audit, progress, site, running, key) {
 async function renderAudit(key) {
   const data = await api("/api/audit?key=" + encodeURIComponent(key));
   const { audit, progress, summary, site } = data;
-  const running = audit.status !== "complete";
+  const running = audit.status !== "complete" || !!audit.updating;
   const head = h("div", { class: "row", style: "justify-content:space-between" },
     h("div", {}, h("h1", { text: `${audit.client.business}: ${audit.kind === "recheck" ? "early re-check" : "AI visibility audit"}` }),
       h("p", { class: "sub", text: `${dt(audit.createdAt)} · ${audit.plan.engines.length} platforms · ${audit.plan.runs} runs per question · tested from ${audit.plan.locations.map((l) => l.town).join(", ")}` })),
@@ -886,7 +1155,8 @@ async function renderAudit(key) {
       !running ? h("button", { class: "btn", onclick: () => print(), text: "Print / save PDF" }) : null,
       !running ? h("button", { class: "btn quiet", onclick: () => downloadCsv(key), text: "Raw answers (CSV)" }) : null,
       h("a", { class: "btn quiet", href: `#client/${audit.clientId}`, text: "Back" })));
-  const prog = h("div", { class: "card noprint" }, h("h2", { text: running ? "Collecting answers" : "Collection finished" }),
+  const prog = h("div", { class: "card noprint" }, h("h2", { text: audit.updating ? "Updating this audit" : running ? "Collecting answers" : "Collection finished" }),
+    audit.updating ? h("p", { class: "small muted", text: "The owner’s dashboard keeps showing the earlier results until every part below finishes, then switches to the updated ones." }) : null,
     Object.entries(progress).map(([e, p]) => h("div", { style: "margin:10px 0" },
       h("div", { class: "row", style: "justify-content:space-between" }, h("b", { text: e === "site" ? "Website and listings check" : CONFIG.engines[e]?.label || e }),
         h("span", { class: "small muted", text: `${p.status}${p.total ? ` · ${p.done}/${p.total}` : ""}${p.errors ? ` · ${p.errors} errors` : ""}` })),
@@ -896,11 +1166,17 @@ async function renderAudit(key) {
       e !== "site" && (p.status === "failed" || p.status === "stalled" || (p.status === "done" && p.errors && p.done < p.total))
         ? h("div", { class: "row", style: "margin-top:6px" },
             h("button", { class: "btn quiet tiny", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Retrying…"; try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume", engines: [e] }) }); } catch (err) { alert(err.message); } route(); }, text: `Retry ${CONFIG.engines[e]?.label || e}` }),
-            h("span", { class: "small muted", text: `Asks only its ${p.total - p.done} unanswered questions. Other platforms are kept.` }))
+            h("span", { class: "small muted", text: `Asks only its ${p.total - p.done} unanswered questions. Other platforms are kept.` }),
+            // If it keeps failing, finish the audit without it so the owner's dashboard isn't held up.
+            (p.status === "failed" || p.status === "stalled") && audit.plan.engines.length > 1
+              ? h("div", { class: "row", style: "margin-top:4px;width:100%" },
+                  h("button", { class: "btn quiet tiny", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Finishing…"; try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "drop-engines", engines: [e] }) }); } catch (err) { alert(err.message); } route(); }, text: `Finish without ${String(CONFIG.engines[e]?.label || e).replace(/\s*\(.*\)\s*$/, "")}` }),
+                  h("span", { class: "small muted", text: "Scores the audit from the other platforms now. You can add it back later with the Add button." }))
+              : null)
         : e === "site" && !running && p.status === "done" && !placesMissing(progress, site)
         ? h("div", { class: "row", style: "margin-top:6px" },
             h("button", { class: "btn quiet tiny", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Re-checking…"; try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume", engines: ["site"] }) }); } catch (err) { alert(err.message); } route(); }, text: "Re-check website and listings" }),
-            h("span", { class: "small muted", text: "Reads the website and Google listings again. AI answers are kept." }))
+            h("span", { class: "small muted", text: "Reads the website and Google listings again, using the website and phone now on the client page, then re-scores. AI answers are kept." }))
         : null)),
     updateRow(audit, progress, site, running, key),
     Object.values(progress).some((p) => p.status === "stalled" || p.status === "failed") ? h("button", { class: "btn quiet", onclick: async () => { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume" }) }); route(); }, text: "Resume stalled platforms" }) : null);
@@ -908,6 +1184,7 @@ async function renderAudit(key) {
   if (summary) nodes.push(...report(audit, summary, site));
   if (!running) nodes.push(h("div", { class: "card noprint" }, h("div", { class: "row" },
     h("button", { class: "btn quiet", onclick: async () => { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "rescore" }) }); route(); }, text: "Re-score" }),
+    h("span", { class: "small muted", text: "Re-reads every answer with the latest rules and the phone now on the client page. Nothing is asked again." }),
     h("button", { class: "btn danger", onclick: async () => { if (confirm("Delete this audit and its answers?")) { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "delete" }) }); location.hash = `#client/${audit.clientId}`; } }, text: "Delete audit" }))));
   mount(nodes);
   if (running) pollTimer = setTimeout(route, 6000);
@@ -985,7 +1262,9 @@ function report(audit, s, site) {
   const listings = card("Google listings", "From Google’s own business data (Places API).",
     h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Business" }), h("th", { class: "num", text: "Rating" }), h("th", { class: "num", text: "Reviews" }), h("th", { text: "Phone" }), h("th", { text: "Hours" }))),
       h("tbody", {}, listRows.map(({ e, p }) => h("tr", {}, h("td", { style: "font-weight:600", text: e.name }), h("td", { class: "num", text: p.rating ?? "–" }), h("td", { class: "num", text: p.reviews ?? "–" }), h("td", { text: p.phone || (p.skipped ? "not checked" : "–") }), h("td", { class: "small", text: (p.hours || []).join("; ") || "–" }))))),
-    issues.length ? h("div", { style: "margin-top:10px" }, issues.map((t) => h("p", {}, h("span", { class: "pill p-fail", text: "Fix" }), " ", t))) : null);
+    issues.length ? h("div", { style: "margin-top:10px" }, issues.map((t) => h("p", {}, h("span", { class: "pill p-fail", text: "Fix" }), " ", t))) : null,
+    // A Google Places error (key not enabled for Places API (New), billing not linked, a restriction) shows here.
+    cp.error ? h("p", { class: "err small", text: "Google Places didn’t answer: " + String(cp.error).slice(0, 300) }) : null);
 
   const acc = s.accuracy;
   const accuracy = card("What AI says about your client by name", `Answers to questions that name ${you.name} directly. Named in ${pct(acc.brandedNamed.rate)} of ${acc.brandedNamed.n} answers.`,

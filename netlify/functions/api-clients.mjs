@@ -20,7 +20,14 @@ export default async (req) => {
     // Keep the dashboard link and plan unless this save is meant to change them.
     if (existing && incoming.shareToken === undefined) incoming.shareToken = existing.shareToken;
     if (existing && incoming.plan === undefined) incoming.plan = existing.plan;
-    for (const k of ["notify", "ga4PropertyId"]) if (existing && incoming[k] === undefined) incoming[k] = existing[k];
+    for (const k of ["notify", "ga4PropertyId", "asks"]) if (existing && incoming[k] === undefined) incoming[k] = existing[k];
+    // Billing changes only through Stripe and the sign-up actions, never from a stale console page.
+    if (existing) incoming.billing = existing.billing;
+    // A request the owner sent while this page was open isn't lost: keep any the save doesn't mention.
+    if (existing && Array.isArray(incoming.asks)) {
+      const ids = new Set(incoming.asks.map((x) => x.id));
+      incoming.asks = [...incoming.asks, ...(existing.asks || []).filter((x) => !ids.has(x.id))].sort((x, y) => String(x.at).localeCompare(String(y.at)));
+    }
     if (incoming.resetShare) incoming.shareToken = "";
     const c = normalizeClient(incoming);
     if (!c.business || !c.trade || !c.town) return json({ error: "Business name, trade, and town are required." }, 400);

@@ -59,7 +59,8 @@ const MAINE = [
   [/roof/, (t) => [`Who can deal with ice dams near ${t}?`, `Roofer near ${t} for storm damage after a nor’easter`]],
   [/clean|maid/, (t) => [`Who does summer rental turnovers near ${t}?`, `Who can open up a camp for the season near ${t}?`]],
   [/landscap|lawn|garden|plow|snow/, (t) => [`Who does spring cleanup after mud season near ${t}?`, `Who does snow plowing near ${t}?`]],
-  [/fenc/, (t) => [`Who can fix a fence heaved by frost near ${t}?`, `Who installs farm or snow fencing near ${t}?`]]
+  [/fenc/, (t) => [`Who can fix a fence heaved by frost near ${t}?`, `Who installs farm or snow fencing near ${t}?`]],
+  [/contract|remodel|build|carpent/, (t) => [`Who repairs storm or ice damage on homes near ${t}?`, `Who renovates camps and cottages near ${t}?`]]
 ];
 const CRAVE = [
   [/diner|breakfast|brunch/, ["corned beef hash", "blueberry pancakes"], "breakfast"],
@@ -79,6 +80,7 @@ export function discoveryQuestions(client, town) {
   const t = noun(client.trade), a = article(t), ts = plural(t);
   const k = t.toLowerCase();
   const st = clean(client.state) || "ME";
+  // Every question names the state with the town: "near Augusta" alone can get answers about Augusta, Georgia.
   const where = `${town}, ${st}`;
   const mi = client.radius || 15;
   const cap = (x) => x.replace(/^./, (m) => m.toUpperCase());
@@ -88,29 +90,29 @@ export function discoveryQuestions(client, town) {
     const meal = c[2];
     list = [
       ["best", "Looking for the best", `What’s the best ${t} in ${where}?`],
-      ["locals", "Looking for the best", `Where do locals go for ${meal} in ${town}?`],
+      ["locals", "Looking for the best", `Where do locals go for ${meal} in ${where}?`],
       ["opennow", "Right now", `${cap(t)} open now near ${town}, ${st}`],
-      ["mealnow", "Right now", `Where can I get ${meal} in ${town} right now?`],
-      ["crave1", "A specific craving", `Who has the best ${c[1][0]} near ${town}?`],
-      ["crave2", "A specific craving", `Where can I get ${c[1][1]} in ${town}?`],
-      ["parking", "Plans and logistics", `${cap(ts)} in ${town} with easy parking`],
-      ["kids", "Plans and logistics", `Kid-friendly ${t} near ${town}`],
+      ["mealnow", "Right now", `Where can I get ${meal} in ${where} right now?`],
+      ["crave1", "A specific craving", `Who has the best ${c[1][0]} near ${where}?`],
+      ["crave2", "A specific craving", `Where can I get ${c[1][1]} in ${where}?`],
+      ["parking", "Plans and logistics", `${cap(ts)} in ${where} with easy parking`],
+      ["kids", "Plans and logistics", `Kid-friendly ${t} near ${where}`],
       ["siri", "Asked out loud", `Find ${a} ${t} near ${town}, Maine`],
-      ["notourist", "Only in Maine", `Where do locals eat in ${town}, not the tourist spots?`],
-      ["lobster", "Only in Maine", `Best place for a lobster roll near ${town}?`]
+      ["notourist", "Only in Maine", `Where do locals eat in ${where}, not the tourist spots?`],
+      ["lobster", "Only in Maine", `Best place for a lobster roll near ${where}?`]
     ];
   } else {
     const jobs = (JOBS.find(([re]) => re.test(k)) || [null, ["a quick job", "a bigger project"]])[1];
-    const me = (MAINE.find(([re]) => re.test(k)) || [null, (tw) => [`Who’s open after a snowstorm near ${tw}?`, `Most trusted local ${t} in Maine near ${tw}`]])[1](town);
+    const me = (MAINE.find(([re]) => re.test(k)) || [null, (tw) => [`Who’s open after a snowstorm near ${tw}?`, `Most trusted local ${t} near ${tw}`]])[1](where);
     list = [
       ["best", "Looking for the best", `Who’s the best ${t} in ${where}?`],
       ["toprated", "Looking for the best", `Top-rated ${ts} near ${town}, ${st}`],
       ["emergency", "Need it now", `Emergency ${t} near ${town}, ${st}`],
-      ["today", "Need it now", `I need ${a} ${t} in ${town} today. Who’s open?`],
-      ["job1", "A specific job", `Who’s good for ${jobs[0]} near ${town}?`],
-      ["job2", "A specific job", `Who does ${jobs[1]} around ${town}?`],
+      ["today", "Need it now", `I need ${a} ${t} in ${where} today. Who’s open?`],
+      ["job1", "A specific job", `Who’s good for ${jobs[0]} near ${where}?`],
+      ["job2", "A specific job", `Who does ${jobs[1]} around ${where}?`],
       ["price", "Price and trust", `How much does ${a} ${t} cost in ${town}, ${st}? Who do you recommend?`],
-      ["trusted", "Price and trust", mi >= 400 ? `Most trusted ${t} in Maine` : `Most trusted ${t} within ${mi} miles of ${town}`],
+      ["trusted", "Price and trust", mi >= 400 ? `Most trusted ${t} in Maine` : `Most trusted ${t} within ${mi} miles of ${where}`],
       ["voice", "Asked out loud", `Find ${a} ${t} near ${town}, Maine`],
       ["maine1", "Only in Maine", me[0]],
       ["maine2", "Only in Maine", me[1]]

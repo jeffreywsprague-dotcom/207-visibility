@@ -58,17 +58,22 @@ const GENERIC = new Set(("phone number numbers location locations address addres
   "emergency availability available booking book appointment appointments reservations reservation menu parking directions " +
   "best for good great top picks pick consider considerations important things bottom line verdict final thoughts next steps step " +
   "in conclusion details detail description about overall quick facts fact other more additional also the a an of and to with your you call ahead " +
-  "social media hours: details: contact: local nearby trust trusted reliable why: alternatives alternative similar businesses business").split(/\s+/));
+  "social media hours: details: contact: local nearby trust trusted reliable why: alternatives alternative similar businesses business " +
+  // Headings AI adds around its picks ("🏆 My Recommendation", "One quick question", "Honorable mentions")
+  "my our quick question questions one honorable honourable mention mentions runner runners up winner winners choice choices shortlist list " +
+  "comparison compare glance budget value premium standout standouts contender contenders regional worth checking out considering another strong solid").split(/\s+/));
 export function isLabel(name) {
   const words = String(name || "").toLowerCase().replace(/\*|_/g, "").replace(/[^a-z0-9&' ]+/g, " ").trim().split(/\s+/).filter(Boolean);
   return !words.length || (words.length <= 5 && words.every((w) => GENERIC.has(w)));
 }
 
 // Guess the business name at the start of a list item: "**Acme Fence** – great reviews" -> "Acme Fence".
+// Leading medals, emoji and numbering come off first: "🥈 2. Hathorne Fencing LLC – Best ratings" -> "Hathorne Fencing LLC".
+const leadTrim = (s) => s.replace(/^[^\p{L}\p{N}*]+/u, "").replace(/^\d{1,2}[.)]\s+/, "").replace(/^[^\p{L}\p{N}*]+/u, "");
 export function leadName(item) {
-  let s = item.replace(/\[[^\]]*\]\([^)]*\)/g, (m) => m.replace(/\]\([^)]*\)/, "]")).replace(/[[\]]/g, "");
+  let s = leadTrim(item.replace(/\[[^\]]*\]\([^)]*\)/g, (m) => m.replace(/\]\([^)]*\)/, "]")).replace(/[[\]]/g, ""));
   const bold = s.match(/\*\*([^*]{3,80})\*\*/);
-  if (bold) s = bold[1];
+  if (bold) s = leadTrim(bold[1]);
   s = s.split(/\s[–—-]\s|:\s|\s\(|,\s|\.\s/)[0].replace(/\*+/g, "").trim();
   if (s.length < 3 || s.length > 70) return null;
   const words = s.split(/\s+/);

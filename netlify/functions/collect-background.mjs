@@ -10,6 +10,7 @@ import { checkSite } from "../lib/sitecheck.mjs";
 import { businessFacts } from "../lib/places.mjs";
 import { finishIfDone } from "../lib/finish.mjs";
 import { aiReferrals } from "../lib/ga4.mjs";
+import { alertFounder } from "../lib/notify.mjs";
 
 export const config = { background: true };
 const BUDGET_MS = 12.5 * 60 * 1000;
@@ -90,6 +91,13 @@ export default async (req) => {
   state.status = state.fatal ? "failed" : "done";
   state.finishedAt = new Date().toISOString();
   await save();
+  if (state.fatal && audit.source && audit.source !== "staff" && !(await getJSON("notifications", `failed/${key}`))) {
+    await setJSON("notifications", `failed/${key}`, { at: new Date().toISOString(), engine });
+    await alertFounder(`an audit needs you: ${audit.client?.business || audit.clientId}`, [
+      `${ENGINES[engine].label || engine} stopped on ${audit.client?.business || "a client"}’s ${audit.source === "signup" ? "first audit" : audit.kind === "recheck" ? "re-check" : "monthly audit"}: ${state.fatal}`,
+      "That usually means the API key is wrong or the account is out of credit. Fix it and press Resume stalled platforms, or finish the audit without that platform."
+    ], `${baseUrl(req)}/admin/#audit/${encodeURIComponent(key)}`);
+  }
   await finishWhenAllDone(key);
   return json({ ok: true });
 };

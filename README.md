@@ -39,6 +39,7 @@ In Netlify, go to **Project configuration → Environment variables → Add a va
 | `PERPLEXITY_API_KEY` | From the Perplexity API console | Recommended |
 | `ANTHROPIC_API_KEY` | From console.anthropic.com → API keys | Optional |
 | `GOOGLE_MAPS_API_KEY` | Google Cloud key with **Places API (New)** enabled. Adds Google ratings, review counts, and hours. About 5 to 10 lookups per audit, well inside Google’s free monthly allowance at launch volume | Optional |
+| `CONTACT_NAME`, `CONTACT_PHONE`, `CONTACT_EMAIL` | How owners reach you, shown under “What needs attention” on every dashboard (“Questions about any of this? Call or text Jeff at …”). Leave them out and that line doesn’t show; owners can still use **Ask us about this** | Optional |
 | `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | From app.dataforseo.com → API Access. Adds **Google AI Mode** as a fifth platform | Recommended |
 | `GA4_SERVICE_ACCOUNT_JSON` | A Google Cloud service account key (the whole JSON). Lets audits count **visits from AI** in clients’ Google Analytics | Optional |
 | `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` | From resend.com, plus a sender like `207 Visibility <hello@yourdomain.com>`. Sends **monthly summary emails** | Optional |
@@ -77,7 +78,11 @@ Tick up to 3 and click **Use selected as target towns**. The next audit uses the
 
 ### Client dashboards
 
-Every client gets a private dashboard at `yoursite.netlify.app/report/#<their link>`. On the client’s page in the console, use **Client dashboard → Copy link** to send it. It updates by itself after every audit and shows:
+The Overview opens with **What needs attention**: every problem in the latest measurement, most urgent first (**Fix now**, then **Big opportunity**, **Next up**, **Keep an eye on**), in plain words. Each one says what it costs, **Your part** (what the owner can do, if anything), **What we do**, and whether it's already in their plan, with an estimate of the points it could add. Beside it, **What's working** lists where they're already strong. The summary at the top says how many things need attention and links to the first one. **Every question** opens with the questions competitors win (switch to **By topic** for the old grouping).
+
+**Ask us about this** on any item sends you a request. It shows at the top of that client's page in the console (and as “1 request from the owner” in the client list). Get back to them, then click **Mark done**.
+
+Every client gets a private dashboard at `yoursite.netlify.app/report/#<their link>`. On the client’s page in the console, use **Client dashboard → Copy link** to send it, or **Copy message** for a short note that ends with the link (add a greeting at the top; keep the link last, because iPhones only show the preview card for a link at the start or end of a text). When the link is pasted into a text, email, or social post, the preview shows “Your AI Visibility Dashboard”, one line about it, and a branded image (`public/share/dashboard.jpg`; the home page uses `public/share/home.jpg`). These point at `https://207visibility.com`, so update the `og:image` addresses if the domain ever changes. Apps keep a preview they’ve already made, so a link sent before these were added keeps its old preview in that conversation. It updates by itself after every audit and shows:
 - their AI Mention Rate with a likely range and the change since last month, their rank, and how often they’re named first,
 - a month-by-month trend with competitors, plus a slider to look back at any past month,
 - filters by AI platform and by the town the customer is in, which recalculate everything,
@@ -100,6 +105,65 @@ In a report’s **Who AI names instead** list, click **Track as competitor** to 
 **Fully automatic option:** set the environment variable `AUTO_AUDIT_LEADS` to `true` and every snapshot request starts a light audit (2 runs, 2 towns) the moment it arrives. Requests are limited to 5 per visitor and 200 total per day, but leave this off until you’re comfortable with the cost.
 
 ---
+
+## Self-serve sign-up and the monthly plan
+
+Owners sign up and pay on their own; your one hands-on job is checking each first audit before it goes out.
+
+**How it runs**
+1. An owner runs the free check, then taps **Start my full audit** (or goes straight to `/start/`). The sign-up page fills in what they typed in the free check and asks for the rest: every phone number customers call (for the accuracy check), hours, address, up to two target towns, competitors, and their name and email.
+2. They pay the audit price through Stripe Checkout. The first 25 paid sign-ups get the founding price automatically; the page shows how many founding spots are left. An abandoned checkout never uses up a spot.
+3. Stripe tells the engine the payment went through. The engine creates the client (with the owner’s email switched on for updates) and starts their first audit on every platform you have keys for. You get an email (with email sending set up) and the sign-up shows on the **Clients** page.
+4. When the audit finishes you get a second email, and the sign-up shows **Ready for review**. Open the client: check the competitors, towns and phone flags (fix the client and use **Re-check website and listings**, then **Re-score**, if anything’s off), build the plan with **Suggest from latest audit**, and **Save plan**.
+5. Press **Release to owner**. They get an email with their private dashboard link, how to start, and the monthly plan offer. Without email sending set up, the console shows the email for you to send yourself.
+6. On their dashboard, owners can start the monthly plan (or yearly). Paying switches on the monthly re-run; cancelling in Stripe’s billing page switches it off at the end of the paid period. Founding owners keep their founding monthly price.
+
+**When something needs you**, the Clients page says so at the top and you get an email:
+- **Audit stopped part-way** (a sign-up’s first audit, or a client’s monthly audit): a platform stalled or its key failed. Open the audit and press **Resume stalled platforms**, or finish without that platform.
+- **“An audit needs you”** instead of “ready for review”: the audit finished, but fewer than 9 in 10 questions got an answer (a platform was erroring). Open the audit and press **Retry** on each platform that came up short before you review it. The release button warns you too.
+- **“Already a client”** on a sign-up: the same business name and town as an existing client, so it may be a second sign-up for the same business. Check before you release.
+- If Stripe delivers a payment twice, the engine starts one audit and sends one alert.
+
+**What the owner can do on their own:** each plan step has a short **How to do it** list (Suggest writes it; edit it in the plan editor’s “How to do it” box, one line per step). **Your business details** at the bottom of their plan lets them correct their website, phone numbers, hours and address; the change is logged in the client’s notes and used from the next measurement on.
+
+**Terms and privacy** live at `/terms/` (linked from the sign-up page and both footers). It’s a plain-language draft: read it, and have someone qualified look it over before you take payments from strangers. The footer and that page show `CONTACT_EMAIL`.
+
+**Before Stripe is set up**, nothing breaks: the sign-up page tells owners you’ll email a secure payment link within 2 business days, you get an alert, and the sign-up waits on the Clients page as **Waiting for payment**. Send them a Stripe payment link by hand, then press **Paid: start audit**. A monthly plan request from a dashboard shows up on the client’s page as an owner request.
+
+**Prices** are Netlify environment variables, in cents, so you can change them without touching the code:
+
+| Name | What it is | Default |
+|---|---|---|
+| `AUDIT_PRICE_CENTS` | The full audit | `9900` ($99) |
+| `MONTHLY_PRICE_CENTS` | The monthly plan | `4900` ($49) |
+| `YEARLY_PRICE_CENTS` | The yearly plan; `0` hides it | `49000` ($490) |
+| `FOUNDING_SPOTS` | How many paid sign-ups get founding prices; `0` turns them off | `25` |
+| `FOUNDING_AUDIT_CENTS` | Founding audit price | `4900` ($49) |
+| `FOUNDING_MONTHLY_CENTS` | Founding monthly price, kept while they stay | `3900` ($39) |
+| `FOUNDING_YEARLY_CENTS` | Founding yearly price | `39000` ($390) |
+| `SIGNUP_ENABLED` | `false` pauses new sign-ups (the page says so) | on |
+| `ALERT_EMAIL` | Where your sign-up and review alerts go | `CONTACT_EMAIL` |
+
+The home page, the sign-up page and the dashboards all read these, so a change shows everywhere after the next deploy.
+
+**What you need switched on before strangers pay:** Stripe (below, including the two subscription events and the customer portal), and email sending (`RESEND_API_KEY` and `NOTIFY_FROM_EMAIL`, under Monthly summaries), so the dashboard link and your alerts go out on their own. Set `CONTACT_EMAIL` too: owners’ replies go there.
+
+## Quick checks from the dashboard
+
+Between measurements, owners can check their own progress from the steps in **Your plan**:
+
+- **Check website and Google** is one bar at the top of **Your plan** (“Made a change? Check it now.”). It reads their website the way AI crawlers do and looks up their Google rating and review count (and their competitors'). These are exact facts, so the benchmarks in the steps update right away, marked “Checked November 10”, and a benchmark that’s now met turns green: “Confirmed by your check on November 10.” If it fixes something in **What needs attention** (a website blocking AI), that item says so. The bar names any serious website problem it found. With no website on file it still checks Google. It never changes the score; the next measurement does. Up to 3 a day per client. Cost: Google lookups only, a few cents at most.
+- **Quick look** appears once the owner ticks a step done. It asks that step’s questions once on every AI platform: a phone-number step asks the by-name questions and checks the numbers; a town step asks that town’s questions; others ask three of their main questions. The owner sees a plain verdict (“Looks fixed: every answer that gave a phone number gave yours”, “Not yet: 2 of 5…”, “Named by 2 of 5 AI assistants for customers in Augusta”), who was named instead, and every answer. It’s labeled as a preview: it never changes the score or confirms a rate benchmark. Cost: about $0.17–0.35 each at list prices.
+- **Allowance:** 2 quick looks with the audit, 5 a month on the monthly plan (pilots you measure monthly by hand get 5 too). One per step per day. A quick look that gets no answers back doesn’t count. When an audit-only owner runs out, the step points them to the monthly plan.
+- **In the console**, each client’s page has a **Quick checks from the dashboard** card: what’s left, and every check with its verdict and cost.
+
+| Name | What it does | Default |
+|---|---|---|
+| `QUICK_CHECKS_ENABLED` | `false` hides both buttons on every dashboard | on |
+| `QUICK_LOOKS_AUDIT` | Quick looks included with the audit | `2` |
+| `QUICK_LOOKS_MONTHLY` | Quick looks per month on the monthly plan | `5` |
+| `QUICK_SITE_PER_DAY` | Website and Google checks per client per day | `3` |
+| `QUICK_LOOKS_DAILY_CAP` | Quick looks per day across all clients, as a spending guard | `100` |
 
 ## Early re-checks (paid)
 
@@ -126,19 +190,23 @@ Owners who finish part of their plan don’t have to wait for the monthly audit.
 
 1. Create a Stripe account at stripe.com (use your business email, not a school one). Stay in **Test mode** until a test payment works end to end.
 2. In Stripe, go to **Developers → API keys** and copy the **Secret key**.
-3. Go to **Developers → Webhooks → Add endpoint**. Endpoint URL: `https://<your site>/api/stripe-webhook`. Event: `checkout.session.completed`. Save, then copy the **Signing secret** (it starts with `whsec_`).
+3. Go to **Developers → Webhooks → Add endpoint**. Endpoint URL: `https://<your site>/api/stripe-webhook`. Events: `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`. Save, then copy the **Signing secret** (it starts with `whsec_`).
+   Then go to **Settings → Billing → Customer portal**, allow customers to cancel and update their payment method, and save. That page is where the dashboard’s **Manage billing or cancel** button sends monthly-plan owners.
 4. In Netlify, add these environment variables, then trigger a deploy:
 
 | Name | What it is | Default |
 |---|---|---|
-| `STRIPE_SECRET_KEY` | Stripe secret key. Without it, owners send requests instead of paying | not set |
+| `STRIPE_SECRET_KEY` | Stripe secret key. Without it, sign-ups, monthly plans and re-checks become requests you follow up by hand | not set |
 | `STRIPE_WEBHOOK_SECRET` | The webhook’s signing secret, so the engine can check that payment notices really come from Stripe | not set |
 | `RECHECK_PRICE_CENTS` | Price in cents | `4900` ($49) |
 | `RECHECK_RUNS` | Runs per question, 1 to 5 | `2` |
 | `RECHECK_NAME` | What the dashboard and the Stripe receipt call it | `Early re-check` |
 | `RECHECK_ENABLED` | Set to `false` to hide the card from every dashboard | on |
 
-5. Test it: open a client’s dashboard, click **Re-check now**, and pay with Stripe’s test card `4242 4242 4242 4242` (any future date, any CVC). You should land back on the dashboard with “Payment received,” and the re-check should appear running in the console within a few seconds.
+5. Test it with Stripe’s test card `4242 4242 4242 4242` (any future date, any CVC):
+   - Sign up at `/start/` with a test business and pay. You should land on “Thank you. Your audit is running,” and the sign-up should appear on the Clients page with its audit running.
+   - When it finishes, build the plan, press **Release to owner**, open the dashboard link, and start the monthly plan with the same test card. The client should show “monthly plan” and “monthly tracking on.” **Manage billing or cancel** should open Stripe’s billing page.
+   - On a client’s dashboard, click **Re-check now** and pay: you should land back with “Payment received,” and the re-check should appear running in the console within a few seconds.
 6. When it works, switch Stripe to live mode, make a live webhook the same way, and replace both Stripe variables in Netlify with the live versions.
 
 Audits now finish on their own: the last platform to finish scores the audit, so paid re-checks and monthly audits complete even when nobody has the console open.
@@ -198,7 +266,7 @@ Adding ChatGPT (`openai`) raises the cost to about 25 cents a check; Gemini with
 
 **The sample dashboard.** The home page and the full sample at `/demo/` show one of eight made-up Maine businesses (a fence company in Gardiner, a plumber in Portland, a diner in Bangor, a roofer in Lewiston, an HVAC company in Biddeford, a dentist in Rockland, a landscaper in Brunswick, an auto shop in Presque Isle), picked at random. Visitors can click **Show another business**, and **Open the full sample** opens the same business in full (`/demo/?s=hvac`, for example). An owner’s results page links to the sample closest to their trade.
 
-**Your offer and your name.** Near the top of the script in `public/index.html` is a `SETTINGS` block. Change `offer` (now “Free while we launch in Maine”) to whatever you’re offering for the full audit, and fill in `contact` with your name and a phone number or email to put a short personal note on the home page. Edit the file on GitHub (open it, click the pencil, search for `SETTINGS`) and commit; Netlify redeploys on its own.
+**Prices and your name.** The home page shows the prices from your Netlify settings (see Self-serve sign-up above). Near the top of the script in `public/index.html` is a `SETTINGS` block: fill in `contact` with your name and a phone number or email to put a short personal note on the home page. Edit the file on GitHub (open it, click the pencil, search for `SETTINGS`) and commit; Netlify redeploys on its own.
 
 ## Your first live test
 
@@ -210,6 +278,10 @@ If a platform shows errors, the progress panel shows the message. Common causes:
 - **Stalled**: click **Resume stalled platforms**.
 - **One platform failed** (a bad key or no credit): fix the key or add credit in that platform’s account, update it in Netlify and trigger a deploy, then open the audit and click **Retry** next to that platform. Only its unanswered questions are asked again; the other platforms’ answers are kept, and the audit finishes and scores itself.
 - **A key was added after an audit ran** (a new platform such as Google AI Mode, or Google Places): open the audit. Under the progress bars it says what's not in the audit yet; click **Add …**. Only the new platform is asked the same questions (the console shows the cost), the Google listings are read for Google Places, and the audit re-scores itself when they finish. Answers already collected are kept.
+- **A platform keeps failing** (an account problem you can't fix right away): click **Finish without …** under it. The audit is scored from the other platforms straight away, and the platform can be added back later with the Add button. While a finished audit is being updated, the owner's dashboard keeps showing the earlier results.
+- **A correct phone number is flagged as wrong:** put every number the business uses in the client's **Phone** field, separated by commas (office, cell, toll-free). The number on their Google listing always counts as right too. Then open the audit and click **Re-score**: nothing is asked again.
+- **The plan says “Get a website” but they have one:** add the website to the client and save, then open the audit and click **Re-check website and listings**. It checks the site and re-scores. (Suggest also points this out when AI cites a site that looks like theirs.)
+- **Re-score** re-reads every saved answer with the current rules (which names are businesses, list formats) and the client's current phone, then scores again. Use it after an update to these rules, or after correcting the phone.
 - **Re-check website and listings** (on a finished audit) reads the website and Google listings again, for example after the owner fixes their site; no AI questions are asked again.
 
 ---

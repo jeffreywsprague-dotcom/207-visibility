@@ -90,12 +90,15 @@ export function namesIn(answer, business) {
 // Strip markdown so the page can show the answer as plain text.
 export function plainText(text, max = 1400) {
   let s = String(text || "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/!\[\]|\[\]\s*/g, "")     // images and empty stubs (Google AI Mode)
+    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, "").replace(/[ \t]+-{3,}[ \t]+/g, "\n")
     .replace(/\[([^\]]+)\]\((?:https?:)?[^)]*\)/g, "$1")
     .replace(/\[\d+(?:,\s*\d+)*\]/g, "")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/\*\*|__/g, "")
     .replace(/(^|\s)[*_](\S[^*_]*\S)[*_](?=\s|$|[.,;:])/g, "$1$2")
     .replace(/^\s*[-*•]\s+/gm, "• ")
+    .replace(/[ \t]+([.,;:])/g, "$1")
     .replace(/[ \t]+$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

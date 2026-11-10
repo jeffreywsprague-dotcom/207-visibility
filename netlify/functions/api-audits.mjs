@@ -1,4 +1,5 @@
 import { checkAdmin, json, baseUrl } from "../lib/http.mjs";
+import { answersShort } from "../lib/score.mjs";
 import { getJSON, listKeys } from "../lib/store.mjs";
 import { startAudit } from "../lib/plan.mjs";
 
@@ -13,7 +14,7 @@ export default async (req) => {
     const keys = await listKeys("audits", `${clientId}/`);
     const audits = (await Promise.all(keys.map((k) => getJSON("audits", k)))).filter(Boolean).map((a) => ({
       key: a.key, id: a.id, kind: a.kind || "audit", createdAt: a.createdAt, status: a.status, engines: a.plan.engines, runs: a.plan.runs,
-      locations: a.plan.locations.map((l) => l.town), estimatedCost: a.plan.estimatedCost,
+      locations: a.plan.locations.map((l) => l.town), estimatedCost: a.plan.estimatedCost, short: a.summary ? answersShort(a) : null,
       rates: a.summary ? a.summary.entities.map((e) => ({ name: e.name, isClient: e.isClient, rate: e.overall.rate, low: e.overall.low, high: e.overall.high })) : null
     })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return json({ audits });

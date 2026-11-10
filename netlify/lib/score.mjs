@@ -1,7 +1,7 @@
 // Turns raw answers into the numbers in the report. Rates come with a 95% Wilson
 // confidence range, which behaves well for small samples and rates near 0% or 100%.
 
-import { digits, phonesIn, norm, isLabel } from "./extract.mjs";
+import { digits, phonesIn, norm, isLabel, domainOf } from "./extract.mjs";
 
 export function wilson(k, n, z = 1.96) {
   if (!n) return { k: 0, n: 0, rate: null, low: null, high: null };
@@ -70,13 +70,34 @@ export function summarize(audit, engineData, site) {
 
   // Accuracy: what AI says when asked about the client by name.
   const client = entities.find((e) => e.isClient);
-  const factsPhone = digits(audit.facts?.phone || site?.places?.client?.phone || "");
+  // The numbers that count as right: every number on file ("207-555-0100, 207-555-0199" is fine)
+  // and the one on their Google listing. An answer is flagged only when none of its numbers is right.
+  const onFile = String(audit.facts?.phone || "").split(/[,;/]|\bor\b/i).map(digits).filter((d) => d.length === 10);
+  const gPhone = digits(site?.places?.client?.phone || "");
+  const okPhones = new Set([...onFile, ...(gPhone.length === 10 ? [gPhone] : [])]);
+  const factsPhone = onFile[0] || (gPhone.length === 10 ? gPhone : "");
+  const phoneSource = onFile.length ? "facts" : factsPhone ? "google" : null;
   const samples = [], phoneIssues = [];
   for (const a of branded) {
     const r = a.analysis.entities[clientId] || {};
     const phones = phonesIn(a.text);
-    if (factsPhone && phones.length && !phones.includes(factsPhone)) phoneIssues.push({ engine: a.engine, question: a.question, phones });
+    if (okPhones.size && phones.length && !phones.some((p) => okPhones.has(p))) phoneIssues.push({ engine: a.engine, question: a.question, phones });
     if (samples.length < 12) samples.push({ engine: a.engine, question: a.question, named: !!r.named, excerpt: excerpt(a.text, r.pos) });
+  }
+  // Their own website, when AI cites it but none is on file: the plan shouldn't tell them to get one.
+  let ownDomain = null;
+  if (!site?.domain && client) {
+    const key = norm(client.name).trim().split(" ").filter((w) => !["the", "company", "co", "inc", "llc", "ltd", "corp", "and", "of"].includes(w)).join("");
+    const seen = {};
+    if (key.length >= 6) for (const a of answers) {
+      const ds = [...(a.citations || []).map((c) => domainOf(c.url, c.title)), ...(String(a.text || "").match(/\b[a-z0-9-]+\.(?:com|net|org|biz|us|co)\b/gi) || [])];
+      for (const d of new Set(ds.filter(Boolean).map((x) => x.toLowerCase().replace(/^www\./, "")))) {
+        const base = d.split(".")[0].replace(/-/g, "");
+        if (base.includes(key) || (base.length >= 6 && key.includes(base) && base.length >= key.length - 3)) seen[d] = (seen[d] || 0) + 1;
+      }
+    }
+    const best = Object.entries(seen).sort((x, y) => y[1] - x[1])[0];
+    if (best) ownDomain = { domain: best[0], count: best[1] };
   }
   const brandedNamed = wilson(branded.filter((a) => a.analysis.entities[clientId]?.named).length, branded.length);
 
@@ -89,7 +110,8 @@ export function summarize(audit, engineData, site) {
     totals: { answers: answers.length, discovery: discovery.length, branded: branded.length, errors: errors.length, byEngine },
     entities: out, questions, sources, others,
     clientDomainCited: site?.domain ? (domainCount[site.domain] || 0) : null,
-    accuracy: { brandedNamed, phoneIssues: phoneIssues.slice(0, 20), samples, factsPhone: factsPhone || null },
+    ownDomain,
+    accuracy: { brandedNamed, phoneIssues: phoneIssues.slice(0, 20), phoneIssueCount: phoneIssues.length, samples, factsPhone: factsPhone || null, phoneSource },
     locations: audit.plan.locations.map((l) => l.town)
   };
 }
@@ -100,4 +122,12 @@ function excerpt(text, pos) {
   // pos is an index into the normalized text; it's close enough to center an excerpt.
   const start = pos > 0 ? Math.max(0, Math.floor(pos * (t.length / Math.max(t.length, pos + 1))) - 160) : 0;
   return (start > 0 ? "…" : "") + t.slice(start, start + 420) + (t.length > start + 420 ? "…" : "");
+}
+
+// An audit that finished with a real share of its questions unanswered (a platform was erroring):
+// { got, expected }, or null when it's whole enough to trust.
+export function answersShort(audit) {
+  const expected = (audit?.plan?.tasksPerEngine || 0) * (audit?.plan?.engines || []).length;
+  const got = audit?.summary?.totals?.answers;
+  return expected && typeof got === "number" && got < expected * 0.9 ? { got, expected } : null;
 }

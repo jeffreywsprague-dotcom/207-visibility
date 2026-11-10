@@ -26,11 +26,12 @@ export function slotStuck(d, audit, now = Date.now()) {
 }
 
 export async function finishIfDone(audit, data) {
-  if (audit.status === "complete" && audit.summary) return audit;
+  if (audit.status === "complete" && audit.summary && !audit.updating) return audit;
   const slots = data || (await loadSlots(audit));
   if (!slotsDone(slots)) return null;
   audit.summary = summarize(audit, Object.fromEntries(audit.plan.engines.map((e) => [e, slots[e]])), slots.site?.site);
   audit.status = "complete";
+  delete audit.updating;   // an update (retried or added platform) replaces the earlier results only now
   audit.completedAt = audit.completedAt || new Date().toISOString();
   await setJSON("audits", audit.key, audit);
   // Monthly audits and re-checks send the owner their summary, if they've asked for one.

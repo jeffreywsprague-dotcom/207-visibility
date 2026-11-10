@@ -1,11 +1,13 @@
 // Read-only data for a client's private dashboard, found by its share token.
 // Sends compact monthly totals for the trend, plus full answers for one month at a time.
-import { json } from "../lib/http.mjs";
+import { json, rid } from "../lib/http.mjs";
 import { getJSON, setJSON, listKeys } from "../lib/store.mjs";
 import { domainOf, isLabel } from "../lib/extract.mjs";
 import { recheckSettings, recheckStatus } from "../lib/recheck.mjs";
 import { normNotify, cleanEmail, cleanPhone } from "../lib/notify.mjs";
 import { ga4Settings } from "../lib/ga4.mjs";
+import { billingSettings, clientPrices } from "../lib/billing.mjs";
+import { quickFor, quickRecords } from "../lib/quick.mjs";
 
 export const config = { path: "/api/share" };
 
@@ -17,6 +19,25 @@ async function clientByToken(t) {
   }
   return null;
 }
+
+const detailsFor = (c) => ({ website: String(c.website || ""), phone: String(c.facts?.phone || ""), hours: String(c.facts?.hours || ""), address: String(c.facts?.address || "") });
+const openAsks = (c) => (c.asks || []).filter((a) => a.status === "open").map(({ key, title, at }) => ({ key, title, at }));
+// The monthly plan card: what they're on, and (if they aren't measured monthly yet) the offer.
+function billingFor(c) {
+  const st = billingSettings(), b = c.billing || null, p = clientPrices(c);
+  const subscribed = !!b && ["monthly", "yearly"].includes(b.plan) && ["active", "past_due", "cancelling"].includes(b.status);
+  return {
+    plan: b?.plan || null, status: b?.status || null, founding: p.founding, endsAt: b?.endsAt || null,
+    subscribed, canManage: subscribed && st.mode === "stripe" && !!b.customerId,
+    // Clients staff measure monthly by hand (pilots) see no offer.
+    offer: subscribed || c.tracking ? null : { mode: st.mode, monthly: p.monthly, yearly: p.yearly }
+  };
+}
+// How owners reach 207 Visibility, shown under "What needs attention" (optional settings in Netlify).
+const contact = () => {
+  const c = { name: process.env.CONTACT_NAME || "", phone: process.env.CONTACT_PHONE || "", email: process.env.CONTACT_EMAIL || "" };
+  return c.phone || c.email ? c : null;
+};
 
 async function answersFor(audit) {
   const out = [];
@@ -80,6 +101,38 @@ export default async (req) => {
       await setJSON("clients", client.id, client);
       return json({ ok: true, notify: client.notify });
     }
+    // The owner keeps their own details current: website, the numbers customers call, hours, address.
+    // They take effect at the next check or measurement; the console shows what changed.
+    if (b.details && typeof b.details === "object") {
+      const d = b.details, cap = (v, n) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, n);
+      const phones = String(d.phone ?? "").split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+      if (phones.some((x) => x.replace(/\D/g, "").length < 10)) return json({ error: "Phone numbers need the area code. Separate more than one with commas." }, 400);
+      const website = cap(d.website, 120).replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+      if (website && !/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(website)) return json({ error: "That website address doesn’t look right. It should look like yourbusiness.com." }, 400);
+      const next = { website, phone: phones.slice(0, 4).map((x) => cap(x, 25)).join(", "), hours: cap(d.hours, 120), address: cap(d.address, 160) };
+      const was = detailsFor(client), LABEL = { website: "Website", phone: "Phone", hours: "Hours", address: "Address" };
+      const changed = Object.keys(next).filter((k) => next[k] !== was[k]);
+      if (changed.length) {
+        client.website = next.website;
+        client.facts = { ...(client.facts || {}), phone: next.phone, hours: next.hours, address: next.address };
+        const line = `${new Date().toISOString().slice(0, 10)}: owner updated ${changed.map((k) => `${LABEL[k].toLowerCase()} to “${next[k] || "blank"}” (was “${was[k] || "blank"}”)`).join("; ")}.`;
+        client.notes = `${String(client.notes || "").trim()}\n${line}`.trim().slice(-2000);
+        client.updatedAt = new Date().toISOString();
+        await setJSON("clients", client.id, client);
+      }
+      return json({ ok: true, details: detailsFor(client), changed: changed.map((k) => LABEL[k]) });
+    }
+    // "Ask us about this" from the owner's "What needs attention" list: saved for 207 Visibility to
+    // see on the client's page in the console. Asking twice about the same thing keeps one request.
+    if (b.ask && typeof b.ask === "object") {
+      const key = String(b.ask.key || "").slice(0, 80), title = String(b.ask.title || "").trim().slice(0, 200), note = String(b.ask.note || "").trim().slice(0, 600);
+      if (!title) return json({ error: "Bad request" }, 400);
+      const asks = Array.isArray(client.asks) ? client.asks : [];
+      if (!asks.some((a) => a.key === key && a.status === "open")) asks.push({ id: rid(8), key, title, note, at: new Date().toISOString(), status: "open" });
+      client.asks = asks.slice(-50);
+      await setJSON("clients", client.id, client);
+      return json({ ok: true, asks: openAsks(client) });
+    }
     const item = (client.plan || []).find((p) => p.id === b.id);
     if (item && typeof b.row === "string") {
       // Mark (or unmark) one benchmark as done; 207 Visibility or the next measurement confirms it.
@@ -126,7 +179,8 @@ export default async (req) => {
       plan: { engines: a.plan.engines, runs: a.plan.runs, locations: a.plan.locations.map((l) => ({ town: l.town })) },
       entities: a.entities.map((e) => ({ id: e.id, name: e.name, aliases: e.aliases || [], isClient: !!e.isClient })),
       site: { domain: site.domain || null, places, traffic: site.traffic ? (site.traffic.error ? { error: true } : site.traffic) : null, findings: (site.findings || []).map((f) => ({ level: f.level, title: f.title })), findingsCount: site.findings ? { fail: site.findings.filter((f) => f.level === "fail").length, warn: site.findings.filter((f) => f.level === "warn").length } : null },
-      summary: { accuracy: { brandedNamed: a.summary.accuracy.brandedNamed, phoneIssues: a.summary.accuracy.phoneIssues.map((p) => ({ engine: p.engine })) } },
+      summary: { accuracy: { brandedNamed: a.summary.accuracy.brandedNamed, phoneIssues: a.summary.accuracy.phoneIssues.map((p) => ({ engine: p.engine, phones: p.phones || [] })),
+        phoneIssueCount: a.summary.accuracy.phoneIssueCount ?? a.summary.accuracy.phoneIssues.length, factsPhone: a.summary.accuracy.factsPhone || null } },
       cells: cellsFrom(answers, a.entities),
       answers: i === audits.length - 1 ? answers : null
     });
@@ -138,7 +192,13 @@ export default async (req) => {
     analytics: { connected: !!client.ga4PropertyId, email: ga4Settings().email },
     client: { business: client.business, trade: client.trade, town: client.town, state: client.state, radius: client.radius, website: client.website },
     audits: out,
-    plan: (client.plan || []).map(({ id, type, title, detail, when, status, doneAt, goals, extra, checks }) => ({ id, type, title, detail, when, status, doneAt, goals: goals || {}, extra: extra || [], checks: checks || {} })),
+    plan: (client.plan || []).map(({ id, type, title, detail, how, when, status, doneAt, goals, extra, checks, keys }) => ({ id, type, title, detail, how: how || [], when, status, doneAt, goals: goals || {}, extra: extra || [], checks: checks || {}, keys: keys || [] })),
+    details: detailsFor(client),
+    asks: openAsks(client),
+    contact: contact(),
+    billing: billingFor(client),
+    // Website and Google checks only count when newer than the latest measurement.
+    quick: quickFor(client, await quickRecords(client.id), audits.at(-1)?.createdAt),
     // A calendar date (the 1st of next month), so it shows the same day in every time zone.
     nextCheck: client.tracking ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10) : null
   });

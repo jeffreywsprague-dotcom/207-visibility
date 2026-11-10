@@ -6,6 +6,22 @@ import { normNotify } from "./notify.mjs";
 
 const list = (v) => (Array.isArray(v) ? v : String(v || "").split(/[,\n]/)).map((s) => String(s).trim()).filter(Boolean);
 
+const BILLING_PLANS = ["audit", "monthly", "yearly"];
+const BILLING_STATUS = ["requested", "paid", "active", "past_due", "cancelling", "cancelled"];
+export function normBilling(b) {
+  if (!b || typeof b !== "object") return null;
+  const s = (v, n = 80) => (v == null || v === "" ? null : String(v).slice(0, n));
+  const n = (v) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(0, Math.round(Number(v))) : null);
+  return {
+    plan: BILLING_PLANS.includes(b.plan) ? b.plan : "audit",
+    status: BILLING_STATUS.includes(b.status) ? b.status : "paid",
+    founding: !!b.founding,
+    signupId: s(b.signupId, 40), customerId: s(b.customerId, 60), subscriptionId: s(b.subscriptionId, 60),
+    auditCents: n(b.auditCents), monthlyCents: n(b.monthlyCents),
+    paidAt: s(b.paidAt, 30), releasedAt: s(b.releasedAt, 30), subscribedAt: s(b.subscribedAt, 30), endsAt: s(b.endsAt, 30)
+  };
+}
+
 export function normalizeClient(c) {
   const comps = (Array.isArray(c.competitors) ? c.competitors : String(c.competitors || "").split("\n"))
     .map((row) => {
@@ -30,7 +46,11 @@ export function normalizeClient(c) {
     tracking: !!c.tracking,
     shareToken: typeof c.shareToken === "string" && c.shareToken.length >= 20 ? c.shareToken : token(),
     plan: (Array.isArray(c.plan) ? c.plan : []).slice(0, 20).map((p, i) => ({
-      id: String(p.id || `p${Date.now().toString(36)}${i}`), title: String(p.title || "").slice(0, 140), detail: String(p.detail || "").slice(0, 600),
+      id: String(p.id || `p${Date.now().toString(36)}${i}`), title: String(p.title || "").slice(0, 140), detail: String(p.detail || "").slice(0, 1500),
+      // How to do it, as short numbered steps the owner can follow.
+      how: (Array.isArray(p.how) ? p.how : String(p.how || "").split("\n")).map((x) => String(x).trim().slice(0, 400)).filter(Boolean).slice(0, 8),
+      // What a suggested step covers, so "Suggest from latest audit" doesn't add it twice.
+      keys: (Array.isArray(p.keys) ? p.keys : []).map((k) => String(k).slice(0, 80)).filter(Boolean).slice(0, 8),
       type: ["crawler", "website", "towns", "listings", "hours", "accuracy", "schema", "reviews", "press", "other"].includes(p.type) ? p.type : "other",
       checkedByOwner: !!p.checkedByOwner,
       goals: Object.fromEntries(Object.entries(p.goals && typeof p.goals === "object" ? p.goals : {})
@@ -45,10 +65,16 @@ export function normalizeClient(c) {
       doneAt: p.status === "done" ? String(p.doneAt || new Date().toISOString().slice(0, 10)).slice(0, 10) : null
     })).filter((p) => p.title),
     notes: String(c.notes || "").slice(0, 2000),
+    // Requests the owner sent from their dashboard ("Ask us about this"); staff mark them done.
+    asks: (Array.isArray(c.asks) ? c.asks : []).slice(-50).map((a) => ({ id: String(a.id || "").slice(0, 20), key: String(a.key || "").slice(0, 80),
+      title: String(a.title || "").slice(0, 200), note: String(a.note || "").slice(0, 600), at: String(a.at || ""), status: a.status === "done" ? "done" : "open",
+      doneAt: a.status === "done" ? String(a.doneAt || new Date().toISOString()) : null })).filter((a) => a.title),
     // Google Analytics 4 property the owner gave us read access to (for visits from AI assistants).
     ga4PropertyId: String(c.ga4PropertyId || "").replace(/^properties\//, "").replace(/\D/g, "").slice(0, 20),
     // Monthly summary and alerts: where to send them, and the owner's consent for texts.
     notify: normNotify(c.notify),
+    // Self-serve sign-up and Stripe billing (null for clients staff added by hand).
+    billing: normBilling(c.billing),
     updatedAt: new Date().toISOString(),
     createdAt: c.createdAt || new Date().toISOString()
   };
