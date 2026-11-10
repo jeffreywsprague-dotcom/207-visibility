@@ -160,7 +160,7 @@ export function releaseMessage(client, base) {
   const subject = `Your AI visibility audit is ready: ${client.business}`;
   const lines = [
     `${first ? `Hi ${first},` : "Hello,"}`,
-    `Your audit for ${client.business} is ready. Your private dashboard shows how often AI names you when customers ask, who it names instead, every answer we collected, and your step-by-step plan.`,
+    `Your audit for ${client.business} is ready. Your private dashboard shows how often AI names you when customers ask, who it names instead, every answer we collected and your step-by-step plan.`,
     `Start with “What needs attention” on the Overview tab, then work through the steps in Your plan. Tick each one off as you finish it.`,
     `Keep this link private: anyone who has it can see your dashboard.`,
     `Want it re-measured every month? You can start the monthly plan from your dashboard (${monthly}, cancel anytime).`,

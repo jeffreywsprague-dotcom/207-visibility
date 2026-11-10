@@ -717,7 +717,7 @@ details.how li{margin:8px 0;}
       <div class="steps">
         <div class="step"><span class="n">01</span><b>Free check</b><p>Tell us your business. We ask AI a few of your customers’ questions live and show you exactly what it said.</p><em>One minute</em></div>
         <div class="step"><span class="n">02</span><b>Full audit</b><p>We ask ChatGPT, Gemini with Google Maps, Perplexity, Claude and Google AI Mode your customers’ questions about 540 times, from your town and up to two more you choose, and line you up against your competitors.</p><em id="stepAudit">$99 · ready within 2 business days</em></div>
-        <div class="step"><span class="n">03</span><b>Your step-by-step plan</b><p>What to fix first and by when: your Google, Bing, Apple and Yelp listings, your reviews, your website, and the directories each AI reads. Each step says what to do and why.</p><em>At your own pace</em></div>
+        <div class="step"><span class="n">03</span><b>Your step-by-step plan</b><p>What to fix first and by when: your Google, Bing, Apple and Yelp listings, your reviews, your website and the directories each AI reads. Each step says what to do and why.</p><em>At your own pace</em></div>
         <div class="step"><span class="n">04</span><b>Measured every month</b><p>On the monthly plan we ask again on the 1st. Your dashboard and a short email show what moved, and what didn’t. Cancel anytime.</p><em id="stepMonthly">$49 a month, optional</em></div>
       </div>
     </div>
@@ -801,7 +801,7 @@ const SAMPLES = [
     sources:[["yelp.com",0.7],["tripadvisor.com",0.6],["visitmaine.com",0.3],["bangordailynews.com",0.25],["facebook.com",0.2],["restaurantguru.com",0.15]],
     listWord:"breakfast spots", closer:"Go early on weekends; lines form by 9.", listings:["Tripadvisor","Yelp"],
     plan4:["Put your full menu on your website","Your menu was a photo. Now it’s a real page that names the dishes people ask about, like the blueberry pancakes."],
-    plan8:["Add parking and kids’ menu details","People ask AI about parking and kids’ menus. Your site and listings now answer both."],
+    plan8:["Add parking and kids’ menu details","People ask AI about parking and kids’ menus, and your website and listings don’t answer either yet."],
     planPage:"Put your menu on a real web page" },
   { id:"roofer", business:"Ridgeback Roofing", trade:"roofer", town:"Lewiston", testTowns:["Brunswick","Gray"], radius:40, website:"ridgebackroofing.com",
     rivals:[{ name:"Androscoggin Roof Co." }, { name:"Summit Edge Roofing" }],
@@ -945,18 +945,18 @@ segGroup($("#count-opts"), "count", COUNT_OPTS);
 
 /* ===== The many ways customers ask ===== */
 const JOBS = [
-  [/plumb/, ["a burst pipe", "a leaking water heater"]],
+  [/plumb/, ["a burst pipe", "a water heater replacement"]],
   [/electric/, ["a breaker that keeps tripping", "a panel upgrade"]],
   [/hvac|heat|air|furnace/, ["an AC that won’t cool", "a furnace tune-up"]],
-  [/roof/, ["a roof leak", "storm damage on a roof"]],
+  [/roof/, ["a roof leak", "roof repair after a storm"]],
   [/dent/, ["a chipped tooth", "a same-day cleaning"]],
-  [/auto|mechanic|car|tire/, ["squeaky brakes", "a check-engine light"]],
-  [/landscap|lawn|garden/, ["a spring cleanup", "a new patio"]],
+  [/auto|mechanic|car|tire/, ["squeaky brakes", "a check-engine light diagnosis"]],
+  [/landscap|lawn|garden/, ["a spring cleanup", "patio installation"]],
   [/clean|maid/, ["a move-out clean", "a deep clean before guests"]],
-  [/pest|extermin/, ["mice in the walls", "a wasp nest"]],
+  [/pest|extermin/, ["mice in the walls", "wasp nest removal"]],
   [/nail/, ["gel nails", "a pedicure"]],
   [/hair|salon|barber|stylist/, ["balayage", "a quick trim"]],
-  [/chiro|physio|massage/, ["lower back pain", "a stiff neck"]],
+  [/chiro|physio|massage/, ["lower back pain", "treatment for a stiff neck"]],
   [/contract|remodel|build|carpent/, ["a kitchen remodel", "a small addition"]],
   [/fenc/, ["a new privacy fence", "a pool fence that meets code"]]
 ];
@@ -1044,14 +1044,14 @@ function assessQuestions(){
     switch (g.label){
       case "Looking for the best":
         if (contender && !strong){ st = MAYBE; why = "Your reviews put you in contention, but AI also weighs “best of” lists and guides."; break; }
-        if (isFood() && !strong){ why = i === 0 ? "AI leans on “best of” lists, food guides, and review sites, and most local spots aren’t on them." : "“Where locals go” answers draw on local press and food writers."; break; }
+        if (isFood() && !strong){ why = i === 0 ? "AI leans on “best of” lists, food guides and review sites, and most local spots aren’t on them." : "“Where locals go” answers draw on local press and food writers."; break; }
         if (strong){ st = MAYBE; why = "Your Google reviews are strong, but AI also weighs your website and other listings."; }
         else if (i === 1) why = "AI names only a handful of businesses, and those spots go to businesses with the most reviews and the clearest listings.";
         else why = fewReviews ? `The business AI names first typically has around ${BENCH.leadReviews} reviews and 4.8+ stars.` : "In a 2026 study, ChatGPT recommended only about 1 in 100 local business locations.";
         break;
       case "Need it now":
         if (contender && i === 0){ st = MAYBE; why = "Strong reviews help, but AI also needs your emergency service spelled out on your site and listings."; break; }
-        why = i === 1 ? "“Who’s open” answers depend on accurate hours on Google, Apple Maps, and Yelp."
+        why = i === 1 ? "“Who’s open” answers depend on accurate hours on Google, Apple Maps and Yelp."
           : state.nosite ? "With no website listing your hours or same-day service, AI has nothing to quote." : "AI needs your emergency and same-day service spelled out on your site and profiles, and most local sites don’t say it plainly.";
         break;
       case "A specific job":
@@ -1069,7 +1069,7 @@ function assessQuestions(){
         break;
       case "Right now":
         if (contender && i === 0){ st = MAYBE; why = "Strong reviews help, but one listing with wrong hours can make you look closed."; break; }
-        why = i === 0 ? "AI checks your hours across Google, Yelp, and other listings, and one wrong listing can make you look closed."
+        why = i === 0 ? "AI checks your hours across Google, Yelp and other listings, and one wrong listing can make you look closed."
           : "These answers depend on accurate hours and a menu that says what you serve and when.";
         break;
       case "A specific craving":
@@ -1080,14 +1080,14 @@ function assessQuestions(){
         why = i === 0 ? "Parking is rarely written down, so AI credits whichever place mentions it first." : "Kid-friendly answers rely on listing details and reviews that mention families.";
         break;
       case "Anywhere in Maine":
-        why = i === 0 ? "Statewide answers favor businesses with the most reviews, press, and listings across Maine, not just in one town." : "“Top-rated” across a whole state usually goes to the businesses with the biggest review counts.";
+        why = i === 0 ? "Statewide answers favor businesses with the most reviews, press and listings across Maine, not just in one town." : "“Top-rated” across a whole state usually goes to the businesses with the biggest review counts.";
         break;
       case "Only in Maine":
         if (isFood()){ why = i === 0 ? "“Where locals eat” answers draw on local press and food writers more than ads." : "Lobster roll answers lean on Maine food guides and local “best of” lists."; break; }
         why = /Efficiency Maine/.test(q) ? "Only registered vendors appear on Efficiency Maine’s list, which AI can cite." : `Few local sites have a page about this, so AI has little to go on in ${town}.`;
         break;
       default:
-        st = NAME; why = "AI will likely find you by name, but may pull outdated hours, the wrong town, or thin details from mismatched listings.";
+        st = NAME; why = "AI will likely find you by name, but may pull outdated hours, the wrong town or thin details from mismatched listings.";
     }
     return { q, st, why };
   }) }));
@@ -1150,16 +1150,16 @@ const rangeWords = (r) => r.low === 0 ? `fewer than ${freq(r.high)}` : `between 
 
 function platforms(){
   const k = kind();
-  const alexa = k === "food" ? ["Yelp listings and partner apps.", "Keep your Yelp listing, hours, and menu complete and current."]
-    : k === "home" ? ["Partner marketplaces like Thumbtack and Angi, plus Yelp.", "Set up and strengthen your Thumbtack, Angi, and Yelp profiles."]
-    : k === "beauty" ? ["Booking apps it connects with, like Vagaro.", "Check your booking app connects, and keep services, prices, and hours in sync."]
+  const alexa = k === "food" ? ["Yelp listings and partner apps.", "Keep your Yelp listing, hours and menu complete and current."]
+    : k === "home" ? ["Partner marketplaces like Thumbtack and Angi, plus Yelp.", "Set up and strengthen your Thumbtack, Angi and Yelp profiles."]
+    : k === "beauty" ? ["Booking apps it connects with, like Vagaro.", "Check your booking app connects, and keep services, prices and hours in sync."]
     : ["Partner apps and directories such as Yelp.", "Keep your Yelp and partner listings complete and consistent."];
   return [
-    ["ChatGPT", "Most used AI for recommendations", true, "Your website (through OpenAI’s crawler and Bing), Yelp, and directories like Angi. It can’t see inside your Google reviews.", "Open your site to its crawler, register you with Bing, and build up your Yelp and directory presence."],
-    ["Gemini", "Google’s assistant, built into Maps", true, "Google Maps data: your profile, reviews, photos, and hours.", "Keep your Maps listing complete and active, with fresh photos and replies to reviews."],
+    ["ChatGPT", "Most used AI for recommendations", true, "Your website (through OpenAI’s crawler and Bing), Yelp and directories like Angi. It can’t see inside your Google reviews.", "Open your site to its crawler, register you with Bing and build up your Yelp and directory presence."],
+    ["Gemini", "Google’s assistant, built into Maps", true, "Google Maps data: your profile, reviews, photos and hours.", "Keep your Maps listing complete and active, with fresh photos and replies to reviews."],
     ["Perplexity", "Cites businesses’ own sites most", true, "Live web pages, especially your own site.", "Make your site fast and readable, with a clear page for each service and town."],
     ["Claude", "Searches the web for local answers", true, "Live web pages and directories it finds by search.", "Make sure your site and the directories it finds say the same thing about you."],
-    ["Google AI Mode", "Google’s AI search", true, "Your Google Business Profile, your Google reviews, and your website.", `Complete and maintain your profile, keep reviews coming, and test answers from across ${areaPhrase()}.`],
+    ["Google AI Mode", "Google’s AI search", true, "Your Google Business Profile, your Google reviews and your website.", `Complete and maintain your profile, keep reviews coming and test answers from across ${areaPhrase()}.`],
     ["Microsoft Copilot", "Built into Windows and Edge", false, "Bing’s index and Bing Places for Business.", "Claim and complete Bing Places, and submit your site to Bing."],
     ["Siri and Apple Maps", "On every iPhone", false, "Your free Apple Business place card, with star ratings usually pulled from Yelp.", "Claim and complete your Apple Business card, and build the Yelp reviews iPhone users see."],
     ["Alexa+", "Books local services by voice", false, alexa[0], alexa[1]]
@@ -1171,17 +1171,17 @@ function catalog(){
   const lowReviews = !c || c[2] < BENCH.leadReviews || !r || ["40","lt4"].includes(state.rating);
   return [
     ["Get found", [
-      [!state.nosite, "Open your website to the AI crawlers behind ChatGPT, Perplexity, Claude, and Bing"],
+      [!state.nosite, "Open your website to the AI crawlers behind ChatGPT, Perplexity, Claude and Bing"],
       [false, "Register and index your site with Bing and Google"],
-      [false, isFood() ? "Put your hours, menu, parking, and what you’re known for in plain text AI can read" : "Put your services, towns, hours, and phone number in plain text AI can read"],
+      [false, isFood() ? "Put your hours, menu, parking and what you’re known for in plain text AI can read" : "Put your services, towns, hours and phone number in plain text AI can read"],
       [false, "Add business schema markup so machines read your details correctly"]]],
     ["Look the same everywhere", [
-      [true, "Claim and complete your Google, Bing Places, and Yelp listings"],
+      [true, "Claim and complete your Google, Bing Places and Yelp listings"],
       [true, "Set up your free Apple Business card for Siri and Apple Maps"],
-      [false, "Fix name, address, and phone mismatches across every directory"],
-      [false, isFood() ? "Get onto the food guides AI cites: Visit Maine, Visit Portland, Tripadvisor, and local roundups" : "Get listed on the directories AI cites for your trade, like Angi, Thumbtack, and the BBB"],
+      [false, "Fix name, address and phone mismatches across every directory"],
+      [false, isFood() ? "Get onto the food guides AI cites: Visit Maine, Visit Portland, Tripadvisor and local roundups" : "Get listed on the directories AI cites for your trade, like Angi, Thumbtack and the BBB"],
       ...(emaine ? [[true, "Get on Efficiency Maine’s vendor locator, the state’s own list homeowners use to find rebate-eligible installers"]] : []),
-      [isFood(), isFood() ? "Pitch local food writers and enter community “best of” awards" : "Get on the local lists AI picks up: chamber directories, Maine trade associations, and “best of” awards"],
+      [isFood(), isFood() ? "Pitch local food writers and enter community “best of” awards" : "Get on the local lists AI picks up: chamber directories, Maine trade associations and “best of” awards"],
       [false, /portland/i.test(state.town) ? "Make sure every listing says Portland, Maine, so AI never mixes you up with Portland, Oregon" : "Make sure every listing names your town and Maine clearly"]]],
     ["Get chosen", [
       [lowReviews, isFood() ? "Table and counter QR cards that make reviewing easy, within Yelp’s and the FTC’s rules" : "Ask for a review after every job, within Google’s and the FTC’s rules"],
@@ -1336,7 +1336,7 @@ $("#sampleNext").addEventListener("click", () => {
 function renderFaq(host){
   const items = [
     ["Can you guarantee AI will recommend me?", "No, and be wary of anyone who does. AI answers change from one search to the next, and no AI company publishes how it picks businesses. What we stand behind is the measurement: every answer we collect, so you can see for yourself what’s changing."],
-    ["Isn’t this just SEO?", "It overlaps, but it isn’t the same. Each AI reads different sources: ChatGPT can’t see your Google reviews, Siri shows Yelp’s stars, and Copilot reads Bing. Ranking well on Google doesn’t mean AI names you. We measure the AI answers themselves, and your plan points at the sources each one reads."],
+    ["Isn’t this just SEO?", "It overlaps, but it isn’t the same. Each AI reads different sources: ChatGPT can’t see your Google reviews, Siri shows Yelp’s stars and Copilot reads Bing. Ranking well on Google doesn’t mean AI names you. We measure the AI answers themselves, and your plan points at the sources each one reads."],
     ["Who does the work in the plan?", "You do, or someone you trust: completing listings, asking customers for reviews, adding pages to your website. Each step says what to do and why, and you tick it off as you go. Want a hand with a step? Ask from your dashboard and we’ll quote a set price before doing anything."],
     ["How soon will I see a change?", "Some fixes, like wrong hours or a website that blocks AI, can show up within weeks. Reviews and listings build over months. On the monthly plan we measure again every month and only call a change when it’s outside normal variation, so you’re never sold a fluke."],
     ["Which AI tools do you measure?", `${PLATFORMS_MEASURED}, asked from your town and up to two more you choose. Your plan also covers the sources Siri, Microsoft Copilot and Alexa read.`],

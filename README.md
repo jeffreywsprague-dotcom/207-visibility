@@ -124,6 +124,10 @@ Owners sign up and pay on their own; your one hands-on job is checking each firs
 - **“Already a client”** on a sign-up: the same business name and town as an existing client, so it may be a second sign-up for the same business. Check before you release.
 - If Stripe delivers a payment twice, the engine starts one audit and sends one alert.
 
+**Keeping a plan’s wording current:** on the client’s page, **Rewrite from latest audit** rewrites every step that hasn’t been started with the latest numbers and the current wording, removes repeats and stale suggestions, and leaves alone anything in progress or done, anything you wrote by hand, and every tick the owner has made. **Suggest from latest audit** only adds steps the plan doesn’t have yet. Neither saves until you press **Save plan**. Use Rewrite once on any plan saved before November 10 (Pine Tree Fence’s, for one).
+
+**How a step reads on the dashboard:** a title and when, one or two sentences on why it matters (with their numbers), a numbered **How to do it** list, then **Benchmarks** (or **Checklist and benchmarks** when the step has listings to tick off). The plan is the second tab, and the dashboard’s top section and **Your next steps** both have an **Open your plan** button.
+
 **What the owner can do on their own:** each plan step has a short **How to do it** list (Suggest writes it; edit it in the plan editor’s “How to do it” box, one line per step). **Your business details** at the bottom of their plan lets them correct their website, phone numbers, hours and address; the change is logged in the client’s notes and used from the next measurement on.
 
 **Terms and privacy** live at `/terms/` (linked from the sign-up page and both footers). It’s a plain-language draft: read it, and have someone qualified look it over before you take payments from strangers. The footer and that page show `CONTACT_EMAIL`.

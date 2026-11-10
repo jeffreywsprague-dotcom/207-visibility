@@ -37,18 +37,18 @@ export function plural(t) {
 }
 
 const JOBS = [
-  [/plumb/, ["a burst pipe", "a leaking water heater"]],
+  [/plumb/, ["a burst pipe", "a water heater replacement"]],
   [/electric/, ["a breaker that keeps tripping", "a panel upgrade"]],
   [/hvac|heat|air|furnace/, ["an AC that won’t cool", "a furnace tune-up"]],
-  [/roof/, ["a roof leak", "storm damage on a roof"]],
+  [/roof/, ["a roof leak", "roof repair after a storm"]],
   [/dent/, ["a chipped tooth", "a same-day cleaning"]],
-  [/auto|mechanic|car|tire/, ["squeaky brakes", "a check-engine light"]],
-  [/landscap|lawn|garden/, ["a spring cleanup", "a new patio"]],
+  [/auto|mechanic|car|tire/, ["squeaky brakes", "a check-engine light diagnosis"]],
+  [/landscap|lawn|garden/, ["a spring cleanup", "patio installation"]],
   [/clean|maid/, ["a move-out clean", "a deep clean before guests"]],
-  [/pest|extermin/, ["mice in the walls", "a wasp nest"]],
+  [/pest|extermin/, ["mice in the walls", "wasp nest removal"]],
   [/nail/, ["gel nails", "a pedicure"]],
   [/hair|salon|barber|stylist/, ["balayage", "a quick trim"]],
-  [/chiro|physio|massage/, ["lower back pain", "a stiff neck"]],
+  [/chiro|physio|massage/, ["lower back pain", "treatment for a stiff neck"]],
   [/contract|remodel|build|carpent/, ["a kitchen remodel", "a small addition"]],
   [/fenc/, ["a new privacy fence", "a pool fence that meets code"]]
 ];
