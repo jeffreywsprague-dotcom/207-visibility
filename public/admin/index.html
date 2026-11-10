@@ -335,7 +335,7 @@ const STEP_PATTERNS = [
   [/^get a website/, "website"], [/^let every ai assistant/, "crawler"],
   [/^fix the wrong phone|^make sure ai knows exactly/, "accuracy"],
   [/^claim and complete your google|^get into chatgpt|^strengthen your google maps profile|^win google.s ai mode|^make sure claude finds/, "core-listings"],
-  [/^get listed and accurate on/, "cited-sites"], [/^add pages for/, "towns"], [/^give perplexity pages/, "pages-perplexity"],
+  [/^get listed and accurate on|^get listed on .+, and check your|^check your .+ pages?$/, "cited-sites"], [/^add pages for/, "towns"], [/^give perplexity pages/, "pages-perplexity"],
   [/^make your emergency|^make your hours and emergency/, "group:Need it now"], [/^make sure ai knows when you.re open/, "group:Right now"],
   [/^add a page for each job/, "group:A specific job"], [/^name the dishes/, "group:A specific craving"],
   [/^publish price ranges/, "group:Price and trust"], [/^answer the planning questions/, "group:Plans and logistics"],
@@ -363,6 +363,8 @@ function ownerPlan(audit, s, site, opts) {
   const trades = /company$/.test(tradeWord) ? tradeWord.replace(/company$/, "companies") : /(s|sh|ch|x)$/.test(tradeWord) ? tradeWord + "es" : tradeWord + "s";
   const places = site?.places || {}, findings = site?.findings || [];
   const f = (t) => findings.find((x) => x.title.startsWith(t));
+  const nRead = (site?.pagesRead || []).length;
+  const readWhere = nRead ? `your home page or the ${nRead === 1 ? "other page" : `${nRead} other pages`} we read` : "your home page";
   const ofN = (r) => (r && r.n ? `${r.k} of ${r.n}` : "none of the");
   const share = (r) => (r && r.n ? pct(r.rate) : "–");
   const ahead = (a, b) => !!(a?.n && b?.n && a.low > b.high);           // a clearly ahead of b
@@ -377,11 +379,12 @@ function ownerPlan(audit, s, site, opts) {
     crawler: ["Forward this to whoever built or hosts your website: “Please make sure our robots.txt file and our firewall or CDN allow these crawlers: OAI-SearchBot, ChatGPT-User, PerplexityBot, Perplexity-User, Claude-SearchBot, Claude-User, Googlebot, bingbot and Applebot.”", "If most of your homepage text only shows after scripts run, ask them to make the main text load as plain HTML too.", CHECK],
     phone: ["Search each wrong number on Google with quotes around it, and write down every site that shows it. If you recognize a number (an old line, an answering service), start where it was used.", "Fix it on Google Business Profile, Bing Places, Apple Business Connect and Yelp first.", "Then fix each directory from your search. Most have an “edit” or “claim this business” link.", "Make sure your own website shows the right number as text.", "Tick this step, then use Quick look to see what AI says now. Listings can take a few weeks to catch up."],
     match: ["Decide the exact name, address and phone you’ll use everywhere, down to “Co.” or “Company”.", "Update Google Business Profile, Bing Places, Apple Business Connect and Yelp to match it exactly.", "Update your website and Facebook page to match.", "Tick this step, then use Quick look to see whether AI recognizes you by name."],
-    core: ["Google: go to business.google.com, find your business, and claim or verify it. Fill in every service, your service area, hours and photos.", "Bing: go to bingplaces.com and add your business. It can import your Google profile in one step.", "Apple: go to businessconnect.apple.com and claim your place, so Siri and Apple Maps show it.", "Yelp: go to biz.yelp.com and claim your page. Add services, hours and photos.", "Each one asks you to prove the business is yours, by text, call, video or postcard.", "Use exactly the same name, address and phone on all four.", "Tick each listing off in the checklist below as you finish it."],
+    core: ["Already claimed and filled in one of these? Tick it off in the checklist below and move to the next.", "Google: go to business.google.com, find your business, and claim or verify it. Fill in every service, your service area, hours and photos.", "Bing: go to bingplaces.com and add your business. It can import your Google profile in one step.", "Apple: go to businessconnect.apple.com and claim your place, so Siri and Apple Maps show it.", "Yelp: go to biz.yelp.com and claim your page. Add services, hours and photos.", "Each one asks you to prove the business is yours, by text, call, video or postcard.", "Use exactly the same name, address and phone on all four."],
+    citedHave: ["Open your page on each site and compare it with your Google profile: name, address, phone and hours.", "Claim the page if you haven’t (look for “claim this business”), then correct anything that differs.", "Add your services, the towns you serve and a few recent photos.", "Tick each site off in the checklist below as you finish it."],
     cited: ["On each site, search for your business first: there may already be a page you can claim.", "Claim it or create a profile. Most let you list for free; you don’t need a paid plan to be listed.", "Use the same name, address, phone and hours as your Google profile.", "Add your services and the towns you serve.", "Tick each site off in the checklist below as you finish it."],
-    towns: (towns) => [`Add one page per town to your website, titled like “${tradeCap} in ${towns[0] || "your town"}, Maine”.`, "On each page, describe two or three real jobs you did there, with photos.", "Link to each town page from your home page or menu.", "Add the same towns to your service area in Google Business Profile.", CHECK],
+    towns: (towns) => [`Add one page per town to your website, titled like “${tradeCap} in ${towns[0] || "your town"}, Maine”.`, "On each page, describe two or three real jobs you did there, with photos.", "Link to each town page from your home page, using the town’s name in the link.", "Add the same towns to your service area in Google Business Profile.", CHECK],
     jobs: ["Make a page for each job, named the way customers ask for it.", "Show real local projects with a photo and a line or two about each.", "Answer what customers ask: roughly what it costs, how long it takes, and when you can start.", "Link to each page from your home page or menu."],
-    hours: ["Put your hours on your website as text, on the home page or a contact page.", "Set the same hours on Google, Bing, Apple and Yelp, and add holiday and seasonal hours.", "If you take emergency or same-day calls, say so in those words on your site and in your Google profile description.", CHECK],
+    hours: ["Put your hours on your home page or contact page as text, not inside an image.", "Set the same hours on Google, Bing, Apple and Yelp, and add holiday and seasonal hours.", "If you take emergency or same-day calls, say so in those words on your site and in your Google profile description.", CHECK],
     price: ["Add a short page with typical price ranges for your most common jobs.", "List what makes a job cost more or less.", "Say how to get an exact quote from you."],
     menu: ["Put your menu on your website as text, not only as a PDF or photo.", "Name your standout dishes and describe them in a sentence.", "Add the menu link to your Google Business Profile."],
     logistics: ["On your website, answer the questions people ask before they come: parking, reservations, kids, accessibility.", "Add what you can to your Google Business Profile, using its attributes and description."],
@@ -442,15 +445,24 @@ function ownerPlan(audit, s, site, opts) {
   // 3. The core profiles every assistant reads
   const gem = you.byEngine?.gemini, gpt = you.byEngine?.openai, core = W?.home === "core";
   add({ keys: ["core-listings"], how: core && W.how ? [...HOW.core.slice(0, -1), W.how, HOW.core[HOW.core.length - 1]] : HOW.core, title: "Claim and complete your Google, Bing, Apple and Yelp listings", when: "This week", type: "listings",
-    detail: `${core ? `${weakTxt} ${W.note} ` : ""}AI gets its facts about you from these four: Google’s AI and Gemini read your Google profile, ChatGPT leans on Bing and Yelp, and Siri uses Apple Maps.`,
+    detail: `${core ? `${weakTxt} ${W.note} ` : ""}AI gets its facts about you from these four: Google’s AI and Gemini read your Google profile, ChatGPT leans on Bing and Yelp, and Siri uses Apple Maps. ${places.client ? `Your Google listing is live${(s.sources.find((x) => x.domain === "yelp.com") || {}).own > 0 ? ", and AI already finds you on Yelp" : ""}. ` : ""}We can’t see inside these accounts, so tick off any you’ve already claimed and completed, and finish the rest.`,
     extra: [track("Google Business Profile", "Claimed and complete, with photos and hours"), track("Bing Places", "Claimed and matching Google"), track("Apple Business Connect", "Claimed and matching Google"), track("Yelp", "Claimed and complete"), ...(core ? W.extra : [])] });
 
   // 4. The sites AI cites most for this kind of business
   const covered = /google|bing|apple|yelp/;
   const top = s.sources.filter((x) => x.domain !== site?.domain && x.domain !== "google maps" && !covered.test(x.domain)).slice(0, 3);
-  if (top.length) add({ keys: ["cited-sites"], how: HOW.cited, title: `Get listed and accurate on ${list(top.map((x) => siteName(x.domain)))}`, when: "This month", type: "listings",
-    detail: `When customers asked about ${trades} near you, AI cited ${list(top.map((x, i) => `${siteName(x.domain)} in ${pct(x.share)}${i ? "" : " of answers"}`))}. Businesses listed on these sites, with matching details, are the ones it names.`,
-    extra: top.map((x) => track(siteName(x.domain), "Listed, details match")) });
+  // Which of those AI already finds them on (a page of theirs cited, or the site named in an answer about them),
+  // so the step says "check your page" there instead of "get listed".
+  const have = top.filter((x) => x.own > 0), need = top.filter((x) => !(x.own > 0));
+  const nm = (x) => siteName(x.domain), bare = (x) => nm(x).replace(/^the /, ""), orList = (a) => list(a).replace(/ and (?!.* and )/, " or ");
+  const citedTxt = `When customers asked about ${trades} near you, AI cited ${list(top.map((x, i) => `${nm(x)} in ${pct(x.share)}${i ? "" : " of answers"}`))}.`;
+  if (top.length) add({ keys: ["cited-sites"], how: need.length ? HOW.cited : HOW.citedHave,
+    title: !have.length ? `Get listed and accurate on ${list(top.map(nm))}` : !need.length ? `Check your ${list(top.map(bare))} ${top.length === 1 ? "page" : "pages"}` : `Get listed on ${list(need.map(nm))}, and check your ${list(have.map(bare))} ${have.length === 1 ? "page" : "pages"}`,
+    when: "This month", type: "listings",
+    detail: !have.length ? `${citedTxt} We didn’t find you on any of them in AI’s answers. Businesses listed there, with matching details, are the ones it names.`
+      : !need.length ? `${citedTxt} AI already finds you on ${top.length === 1 ? "it" : "all of them"}, so the job is making sure the name, address, phone and hours on each match your Google profile.`
+      : `${citedTxt} AI already finds you on ${list(have.map(nm))}, so ${have.length === 1 ? "that page only needs" : "those pages only need"} its details checked. We didn’t find you on ${orList(need.map(nm))} in AI’s answers.`,
+    extra: [...need.map((x) => track(nm(x), "Listed, details match")), ...have.map((x) => track(nm(x), "Details match your Google profile"))] });
 
   // 6. Towns: missing from the website, or where competitors win
   const missingF = f("Some towns you serve"), missing = missingF ? String(missingF.detail || "").split(/,\s*/).filter(Boolean) : [];
@@ -458,7 +470,7 @@ function ownerPlan(audit, s, site, opts) {
   const townList = [...new Set([...missing, ...weakTowns])].slice(0, 3);
   const townStep = !townList.length ? null : add({ keys: ["towns"], how: HOW.towns(townList), title: `Add pages for ${list(townList)}`, when: "This month", type: "towns",
     detail: townList.map((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n ? `In ${t}, AI named you in ${ofN(r)} answers${lb && lb.r.rate > r.rate ? ` and ${lb.e.name} in ${lb.r.k}` : ""}.` : ""; }).filter(Boolean).join(" ") +
-      (townList.some((t) => missing.includes(t)) ? ` Your website doesn’t mention ${list(townList.filter((t) => missing.includes(t))).replace(/ and (?!.* and )/, " or ")} yet.` : "") +
+      (townList.some((t) => missing.includes(t)) ? ` We didn’t find ${list(townList.filter((t) => missing.includes(t))).replace(/ and (?!.* and )/, " or ")} on ${readWhere}.` : "") +
       " AI quotes pages that name the town and the work, so a page per town gives it something of yours to cite." });
 
   // 7. The kinds of questions where they're weakest
@@ -522,7 +534,7 @@ function ownerPlan(audit, s, site, opts) {
     }
     if (own >= 3) continue;
     used.push(x);
-    const hoursToo = type === "hours" && f("Hours not found") ? " Your hours aren’t on your website yet." : "";
+    const hoursToo = type === "hours" && f("Hours not found") ? ` We didn’t find your hours on ${readWhere}.` : "";
     const GH = { "Need it now": HOW.hours, "Right now": HOW.hours, "A specific craving": HOW.menu, "Price and trust": HOW.price, "Plans and logistics": HOW.logistics, "Only in Maine": em ? HOW.emaine : HOW.jobs, "Anywhere in Maine": HOW.state };
     const st = add({ keys: ["group:" + x.g], how: GH[x.g] || [], title, type, when: "This month", detail: `${found} ${why}${hoursToo}` });
     own++;
@@ -538,7 +550,7 @@ function ownerPlan(audit, s, site, opts) {
 
   // 8. Website housekeeping
   if (f("Hours not found") && !used.some((x) => G[x.g][1] === "hours")) add({ keys: ["hours"], how: HOW.hours, title: "Publish your hours everywhere", when: "This week", type: "hours",
-    detail: "AI answers “who’s open now?” from the hours it can read, and it couldn’t find yours on your website." });
+    detail: `AI answers “who’s open now?” from the hours it can read, and we didn’t find yours on ${readWhere}.` });
   const tune = [f("No business schema") && "add business details in the format AI reads (schema markup)", f("Some schema markup is broken") && "repair broken schema markup",
     f("Phone number not found") && "put your phone number in plain text", f("Missing page title") && "add a page title", f("Missing meta description") && "add a page description for search results",
     f("No sitemap") && "add a sitemap so new pages get found"].filter(Boolean);
@@ -1065,9 +1077,19 @@ function planCard(c, audits) {
     : [h("p", { class: "muted", text: "No plan items yet. Suggest them from the latest audit, or add your own." })]));
   draw();
   const latest = audits.find((a) => a.status === "complete");
+  // An audit scored before the "already listed?" check existed is re-scored once, so the plan knows which sites AI already finds them on.
+  const auditForPlan = async () => {
+    let d = await api("/api/audit?key=" + encodeURIComponent(latest.key));
+    if (d.summary && !d.summary.listingsChecked && d.audit?.status === "complete") {
+      msg.textContent = "Re-scoring the audit with the current rules first…";
+      await api("/api/audit", { method: "POST", body: JSON.stringify({ key: latest.key, action: "rescore" }) });
+      d = await api("/api/audit?key=" + encodeURIComponent(latest.key));
+    }
+    return d;
+  };
   const suggest = async () => {
     if (!latest) { msg.textContent = "Run an audit first."; return; }
-    const d = await api("/api/audit?key=" + encodeURIComponent(latest.key));
+    const d = await auditForPlan();
     const have = new Set(plan.flatMap(stepKeys));
     let n = 0, kept = 0;
     for (const st of ownerPlan(d.audit, d.summary, d.site, { monthly: !!c.tracking })) {
@@ -1086,7 +1108,7 @@ function planCard(c, audits) {
   // Steps in progress or done are left alone; a step you wrote yourself is kept; ticks the owner made are kept.
   const refresh = async () => {
     if (!latest) { msg.textContent = "Run an audit first."; return; }
-    const d = await api("/api/audit?key=" + encodeURIComponent(latest.key));
+    const d = await auditForPlan();
     const fresh = ownerPlan(d.audit, d.summary, d.site, { monthly: !!c.tracking });
     const started = (p) => p.status && p.status !== "planned";
     const taken = new Set(plan.filter(started).flatMap(stepKeys));
@@ -1206,14 +1228,23 @@ async function renderAudit(key) {
         : e === "site" && !running && p.status === "done" && !placesMissing(progress, site)
         ? h("div", { class: "row", style: "margin-top:6px" },
             h("button", { class: "btn quiet tiny", onclick: async (ev) => { ev.target.disabled = true; ev.target.textContent = "Re-checking…"; try { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume", engines: ["site"] }) }); } catch (err) { alert(err.message); } route(); }, text: "Re-check website and listings" }),
-            h("span", { class: "small muted", text: "Reads the website and Google listings again, using the website and phone now on the client page, then re-scores. AI answers are kept." }))
+            h("span", { class: "small muted", text: "Reads the website and Google listings again, using the website, phone numbers and business names now on the client page, then re-scores. AI answers are kept." }))
         : null)),
     updateRow(audit, progress, site, running, key),
     Object.values(progress).some((p) => p.status === "stalled" || p.status === "failed") ? h("button", { class: "btn quiet", onclick: async () => { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "resume" }) }); route(); }, text: "Resume stalled platforms" }) : null);
   const nodes = [head, prog];
+  let rescoreNote = null; try { rescoreNote = sessionStorage.getItem("rescoreNote"); sessionStorage.removeItem("rescoreNote"); } catch {}
+  if (rescoreNote) nodes.push(h("div", { class: "card", role: "status" }, h("b", { text: "Re-scored with the corrected name. " }), rescoreNote));
   if (summary) nodes.push(...report(audit, summary, site));
   if (!running) nodes.push(h("div", { class: "card noprint" }, h("div", { class: "row" },
-    h("button", { class: "btn quiet", onclick: async () => { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "rescore" }) }); route(); }, text: "Re-score" }),
+    h("button", { class: "btn quiet", onclick: async (ev) => {
+      const b = ev.target; b.disabled = true; b.textContent = "Re-scoring…";
+      try {
+        const r = await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "rescore" }) });
+        if ((r.renamed || []).some((x) => x.from !== x.to)) sessionStorage.setItem("rescoreNote", r.renamed.filter((x) => x.from !== x.to).map((x) => `${x.from} is now ${x.to}`).join("; ") + ". Press Re-check website and listings too, so its Google rating and reviews are looked up under the right name.");
+        route();
+      } catch (e) { b.disabled = false; b.textContent = "Re-score"; alert("Re-score didn’t finish: " + e.message); }
+    }, text: "Re-score" }),
     h("span", { class: "small muted", text: "Re-reads every answer with the latest rules and the phone now on the client page. Nothing is asked again." }),
     h("button", { class: "btn danger", onclick: async () => { if (confirm("Delete this audit and its answers?")) { await api("/api/audit", { method: "POST", body: JSON.stringify({ key, action: "delete" }) }); location.hash = `#client/${audit.clientId}`; } }, text: "Delete audit" }))));
   mount(nodes);
@@ -1275,7 +1306,7 @@ function report(audit, s, site) {
       h("td", { class: "num noprint", style: "width:170px" }, tracked.has(o.name.toLowerCase()) ? null : h("button", { class: "btn quiet", style: "padding:4px 10px;font-size:.84rem", onclick: (e) => track(e, o.name), text: "Track as competitor" })))))) : h("p", { class: "muted", text: "None detected." }));
 
   const findings = site?.findings || [];
-  const siteCard = card("Website and AI crawler check", site?.url ? `Checked ${site.url}` : site?.skipped || site?.error || "",
+  const siteCard = card("Website and AI crawler check", site?.url ? `Checked ${site.url}${site.pagesRead ? (site.pagesRead.length ? `, and read ${site.pagesRead.length} more page${site.pagesRead.length === 1 ? "" : "s"} before calling anything missing: ${site.pagesRead.map((x) => x.path).join(", ")}` : ". No contact, hours, service-area or town pages were found to read") : ". This check read the home page only; press Re-check website and listings to read the contact and town pages too"}.` : site?.skipped || site?.error || "",
     findings.map((f) => h("div", { style: "margin:8px 0" }, h("span", { class: "pill p-" + (f.level === "info" ? "info" : f.level), text: f.level === "pass" ? "Good" : f.level === "warn" ? "Improve" : f.level === "fail" ? "Fix" : "Note" }), " ", h("b", { text: f.title }), f.detail ? h("div", { class: "small muted", style: "margin-left:4px", text: f.detail }) : null)),
     site?.robots ? h("details", { style: "margin-top:10px" }, h("summary", { text: "robots.txt rules by AI crawler" }),
       h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Crawler" }), h("th", { text: "Used for" }), h("th", { text: "Allowed" }), h("th", { text: "Rule" }))),

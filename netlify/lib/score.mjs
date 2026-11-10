@@ -99,6 +99,26 @@ export function summarize(audit, engineData, site) {
     const best = Object.entries(seen).sort((x, y) => y[1] - x[1])[0];
     if (best) ownDomain = { domain: best[0], count: best[1] };
   }
+  // Whether AI already shows a page of theirs on each of the most-cited sites, so the plan can say
+  // "check your page" instead of "get listed". Counted per site: a cited link or title there that carries
+  // their name, or the site cited or named in an answer to a question about them by name.
+  if (client) {
+    const nameKey = norm(client.name).trim().split(" ").filter((w) => !["the", "company", "co", "inc", "llc", "ltd", "corp", "and", "of"].includes(w)).join("");
+    const squash = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const ALSO = { "bbb.org": ["better business bureau", "bbb"], "angi.com": ["angi", "angie’s list", "angie's list"], "homeadvisor.com": ["homeadvisor", "home advisor"], "tripadvisor.com": ["tripadvisor", "trip advisor"] };
+    for (const src of sources) {
+      const dom = src.domain, base = dom.split(".")[0];
+      const words = [...(ALSO[dom] || []), ...(base.length >= 4 ? [base] : [])].map((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i"));
+      let own = 0;
+      for (const a of answers) {
+        const onSite = (a.citations || []).filter((c) => domainOf(c.url, c.title) === dom);
+        const named = nameKey.length >= 6 && onSite.some((c) => squash(c.url).includes(nameKey) || squash(c.title).includes(nameKey));
+        const byName = a.branded && a.analysis?.entities?.[clientId]?.named && (onSite.length > 0 || words.some((re) => re.test(a.text || "")));
+        if (named || byName) own++;
+      }
+      src.own = own;
+    }
+  }
   const brandedNamed = wilson(branded.filter((a) => a.analysis.entities[clientId]?.named).length, branded.length);
 
   const byEngine = {};
@@ -108,7 +128,7 @@ export function summarize(audit, engineData, site) {
   return {
     generatedAt: new Date().toISOString(),
     totals: { answers: answers.length, discovery: discovery.length, branded: branded.length, errors: errors.length, byEngine },
-    entities: out, questions, sources, others,
+    entities: out, questions, sources, others, listingsChecked: true,
     clientDomainCited: site?.domain ? (domainCount[site.domain] || 0) : null,
     ownDomain,
     accuracy: { brandedNamed, phoneIssues: phoneIssues.slice(0, 20), phoneIssueCount: phoneIssues.length, samples, factsPhone: factsPhone || null, phoneSource },

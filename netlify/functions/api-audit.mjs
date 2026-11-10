@@ -1,7 +1,7 @@
 import { checkAdmin, json, baseUrl } from "../lib/http.mjs";
 import { getJSON, setJSON, del } from "../lib/store.mjs";
 import { summarize } from "../lib/score.mjs";
-import { launchWorkers, buildTasks, COST } from "../lib/plan.mjs";
+import { launchWorkers, buildTasks, COST, refreshEntities } from "../lib/plan.mjs";
 import { ENGINES, enginesAvailable } from "../lib/engines.mjs";
 import { finishIfDone } from "../lib/finish.mjs";
 import { isLabel, analyze } from "../lib/extract.mjs";
@@ -19,6 +19,7 @@ async function refreshFromClient(audit) {
   if (!c) return;
   audit.client = { ...audit.client, website: c.website || "", facts: c.facts || {} };
   audit.facts = c.facts || {};
+  return refreshEntities(audit, c);     // corrected business names (yours or a competitor's)
 }
 function reopen(audit) {
   if (audit.status === "complete" && audit.summary) audit.updating = new Date().toISOString();
@@ -43,7 +44,8 @@ export default async (req) => {
     const body = await req.json();
     if (body.action === "resume") {
       const data = await loadAll(audit);
-      if (Array.isArray(body.engines) && body.engines.includes("site")) await refreshFromClient(audit);
+      // A corrected name means every saved answer is read again when this re-check finishes.
+      if (Array.isArray(body.engines) && body.engines.includes("site")) { if (((await refreshFromClient(audit)) || []).length) audit.reanalyze = true; }
       // Retry the platforms asked for (even ones that finished with errors), or every one that hasn't finished.
       // "site" re-runs only the website and Google listings check (say, after adding the Google Places key).
       const asked = Array.isArray(body.engines) ? body.engines.filter((e) => [...audit.plan.engines, "site"].includes(e)) : [];
@@ -100,8 +102,9 @@ export default async (req) => {
       return json({ ok: true, dropped: drop, status: done?.status || audit.status });
     }
     if (body.action === "rescore") {
-      // Re-read every saved answer with the current rules (labels, list formats), then score.
-      await refreshFromClient(audit);
+      // Re-read every saved answer with the current rules (labels, list formats) and the client's
+      // current details (phone numbers, corrected names), then score.
+      const renamed = (await refreshFromClient(audit)) || [];
       const data = await loadAll(audit);
       for (const e of audit.plan.engines) {
         const d = data[e];
@@ -112,7 +115,7 @@ export default async (req) => {
       audit.summary = summarize(audit, Object.fromEntries(audit.plan.engines.map((e) => [e, data[e]])), data.site?.site);
       audit.status = "complete";
       await setJSON("audits", audit.key, audit);
-      return json({ ok: true });
+      return json({ ok: true, renamed });
     }
     if (body.action === "delete") {
       for (const e of [...audit.plan.engines, "site"]) await del("answers", `${audit.key}/${e}`);

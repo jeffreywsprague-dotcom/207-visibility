@@ -102,7 +102,7 @@ export async function runSiteCheck(rec, client, audit) {
   places.client = facts;
   for (const e of ents.filter((x) => !x.isClient)) places[e.id] = await businessFacts(e.name, e.town || client.town, client.state || "ME");
   const findings = (site.findings || []).map((f) => ({ level: f.level, title: f.title }));
-  rec.site = { domain: site.domain || null, skipped: site.skipped || null, error: site.error || null, findings,
+  rec.site = { domain: site.domain || null, skipped: site.skipped || null, error: site.error || null, findings, pagesRead: site.pagesRead ? site.pagesRead.length : null,
     findingsCount: site.findings ? { fail: findings.filter((f) => f.level === "fail").length, warn: findings.filter((f) => f.level === "warn").length } : null };
   rec.places = Object.fromEntries(Object.entries(places).map(([id, p]) => [id, p && p.found ? { rating: p.rating, reviews: p.reviews } : null]));
   rec.status = site.error && !Object.values(rec.places).some(Boolean) ? "failed" : "done";

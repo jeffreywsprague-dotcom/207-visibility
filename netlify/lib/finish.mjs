@@ -4,6 +4,7 @@
 // progress view and the client dashboard's re-check status call it too, as a backstop.
 import { getJSON, setJSON } from "./store.mjs";
 import { summarize } from "./score.mjs";
+import { analyze } from "./extract.mjs";
 import { afterAudit } from "./notify.mjs";
 
 export const STALE_MS = 17 * 60 * 1000;
@@ -29,6 +30,16 @@ export async function finishIfDone(audit, data) {
   if (audit.status === "complete" && audit.summary && !audit.updating) return audit;
   const slots = data || (await loadSlots(audit));
   if (!slotsDone(slots)) return null;
+  // A business name was corrected since these answers were read: read them again under the right name.
+  if (audit.reanalyze) {
+    for (const e of audit.plan.engines) {
+      const d = slots[e];
+      if (!d?.answers?.length) continue;
+      for (const a of d.answers) a.analysis = analyze({ text: a.text, citations: a.citations, places: a.places }, audit.entities);
+      await setJSON("answers", `${audit.key}/${e}`, d);
+    }
+    delete audit.reanalyze;
+  }
   audit.summary = summarize(audit, Object.fromEntries(audit.plan.engines.map((e) => [e, slots[e]])), slots.site?.site);
   audit.status = "complete";
   delete audit.updating;   // an update (retried or added platform) replaces the earlier results only now

@@ -15,6 +15,42 @@ export function entitiesFor(client) {
   return list;
 }
 
+// A corrected spelling of the same business ("Maine Line Fence" → "Main Line Fence"), as opposed to a
+// different business put in the same slot ("All Around Fence" → "All Season Fence").
+const NAME_STOP = new Set(["the", "company", "co", "inc", "llc", "ltd", "corp", "and", "of"]);
+const nameWords = (n) => String(n || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !NAME_STOP.has(w));
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+export function sameBusiness(a, b) {
+  const x = nameWords(a).join(""), y = nameWords(b).join("");
+  if (!x || !y) return false;
+  return x === y || editDistance(x, y) <= Math.max(2, Math.floor(Math.min(x.length, y.length) * 0.15));
+}
+// Brings a finished audit's business names up to date with the client record, so fixing a typo and
+// re-scoring re-reads every saved answer under the right name. Only renames are applied: a slot that now
+// holds a different business keeps the business the audit was actually run against. The old spelling
+// stays on as an alias, since some answers may have used it. Returns what changed.
+export function refreshEntities(audit, client) {
+  const now = entitiesFor(client), changed = [];
+  for (const e of audit.entities || []) {
+    const cur = now.find((x) => x.id === e.id);
+    if (!cur || !sameBusiness(e.name, cur.name)) continue;
+    const aliases = [...new Set([...(cur.aliases || []), ...(e.aliases || []), ...(e.name !== cur.name ? [e.name] : [])])].filter((x) => x && x !== cur.name);
+    if (e.name !== cur.name || JSON.stringify(aliases) !== JSON.stringify(e.aliases || [])) changed.push({ id: e.id, from: e.name, to: cur.name });
+    e.name = cur.name; e.aliases = aliases; if (cur.town) e.town = cur.town;
+  }
+  if (audit.client) {
+    const me = (audit.entities || []).find((e) => e.isClient);
+    if (me) audit.client.business = me.name;
+    if (Array.isArray(audit.client.competitors)) audit.client.competitors = audit.client.competitors.map((c, i) => { const e = (audit.entities || []).find((x) => x.id === `c${i + 1}`); return e && c ? { ...c, name: e.name } : c; });
+  }
+  return changed;
+}
+
 export function buildTasks(audit) {
   const tasks = [];
   const runs = audit.plan.runs;

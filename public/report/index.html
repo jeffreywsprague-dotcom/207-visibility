@@ -866,7 +866,7 @@ function stepBenchmarks(p, au, first) {
     }
     if (!jobStep && !towns.length && other) row(`Named for customers in ${other}`, "Not measured yet", "Add it to your target towns", null);
     const tf = has(auX, "Some towns you serve"), tp = has(auX, "All tested towns");
-    if (tf || tp) row("Your target towns named on your website", tf ? "Some missing" : "All named", "All named", !tf, sf ? was(has(first, "Some towns you serve") ? "Some missing" : "All named") : "", "towns.site");
+    if (tf || tp) row("Your target towns named on your website’s main pages", tf ? "Some missing" : "All named", "All named", !tf, sf ? was(has(first, "Some towns you serve") ? "Some missing" : "All named") : "", "towns.site");
     note = "Customers ask AI by town name, and AI quotes pages that clearly name the town and the work. A real page per town, with local projects, gives AI something of yours to cite.";
     watch = jobStep ? "Your rate on these questions, at each measurement." : "Your rate for customers in each town, at each measurement.";
   } else if (type === "listings") {
@@ -880,7 +880,7 @@ function stepBenchmarks(p, au, first) {
     watch = "How often AI names you, at each measurement.";
   } else if (type === "hours" || type === "accuracy") {
     const acc = au.summary?.accuracy, accF = first?.summary?.accuracy;
-    if (type === "hours") row("Hours on your website", has(auX, "Hours are in plain text") ? "Published" : has(auX, "Hours not found") ? "Not found" : "–", "Published", has(auX, "Hours are in plain text") ? true : has(auX, "Hours not found") ? false : null, sf ? was(has(first, "Hours are in plain text") ? "Published" : "Not found") : "", "hours.site");
+    if (type === "hours") row("Hours on your website’s main pages", has(auX, "Hours are in plain text") ? "Published" : has(auX, "Hours not found") ? "Not found" : "–", "Published", has(auX, "Hours are in plain text") ? true : has(auX, "Hours not found") ? false : null, sf ? was(has(first, "Hours are in plain text") ? "Published" : "Not found") : "", "hours.site");
     if (acc) {
       row("Answers giving a wrong phone number", String(acc.phoneIssues?.length || 0), "0", !(acc.phoneIssues?.length), accF && sf ? was(String(accF.phoneIssues?.length || 0)) : "", "acc.phone");
       row("AI recognizes you when asked by name", pct(acc.brandedNamed?.rate), "90% or more", (acc.brandedNamed?.rate ?? 0) >= 0.9, accF && sf ? was(pct(accF.brandedNamed?.rate)) : "", "acc.named");
@@ -2051,7 +2051,7 @@ function siteCheckBar() {
     h("div", {},
       h("b", { text: "Made a change? Check it now." }),
       h("p", { text: qk ? `Checked ${monthDay(qk.finishedAt)}. ${found.join(". ")}. The benchmarks in the steps below are updated.`
-        : "We’ll read your website the way AI does and look up your Google rating and reviews, then update the benchmarks in the steps below. It takes about a minute, and it doesn’t change your score." }),
+        : "We’ll read your home page and your contact and town pages the way AI does, look up your Google rating and reviews, then update the benchmarks in the steps below. It takes about a minute, and it doesn’t change your score." }),
       QK.note.site ? h("p", { class: "qk-err", role: "status", text: QK.note.site }) : null,
       !Q.siteLeft && !busy ? h("p", { class: "qk-hint", text: "You’ve used today’s checks. More tomorrow." }) : null),
     h("button", { type: "button", class: "btn ghost", disabled: busy || !Q.siteLeft ? true : null, onclick: () => quickRun({ id: "site" }, "site"), text: busy ? "Checking…" : qk ? "Check again" : "Check website and Google" }));
