@@ -34,12 +34,13 @@ async function onSignup(s, base) {
   if (!signup) return { note: "sign-up not found" };
   // Starting is safe to repeat: if this crashes part-way, Stripe sends the event again and it picks up where it stopped.
   const already = !!signup.auditKey;
-  const { client, audit, error, pending } = await paySignup(signup, { amountCents: s.amount_total, customerId: s.customer || null, session: s.id }, base);
+  const discount = s.total_details?.amount_discount || 0;
+  const { client, audit, error, pending } = await paySignup(signup, { amountCents: s.amount_total, discountCents: discount, customerId: s.customer || null, session: s.id }, base);
   await setJSON("payments", s.id, { id: s.id, kind: "signup", signupId: signup.id, amountCents: s.amount_total, currency: s.currency, email: s.customer_details?.email || null,
     at: new Date().toISOString(), clientId: client?.id || null, auditKey: audit?.key || null, error: error || undefined });
   if (already || pending) return { started: !!audit, duplicate: true };
-  await alertFounder(`new paid sign-up: ${signup.business}`, [
-    `${signup.contact.name} paid ${money(s.amount_total ?? signup.priceCents)} for ${signup.business} (${signup.trade}, ${signup.town})${signup.founding ? ", founding price" : ""}.`,
+  await alertFounder(`${s.amount_total === 0 ? "new comped sign-up" : "new paid sign-up"}: ${signup.business}`, [
+    `${signup.contact.name} ${s.amount_total === 0 ? "signed up with a promo code for the full price (no charge)" : `paid ${money(s.amount_total ?? signup.priceCents)}${discount ? ` after ${money(discount)} off with a promo code` : ""}`} for ${signup.business} (${signup.trade}, ${signup.town})${signup.founding ? ", founding price" : ""}.`,
     error ? `The audit couldn’t start: ${error}. Press Start audit on their sign-up in the console.` : "Their audit is running now. You’ll get another email when it’s ready for review."
   ], client ? `${base}/admin/#client/${client.id}` : `${base}/admin/`);
   return { started: !!audit };
@@ -92,6 +93,8 @@ export default async (req) => {
   if (await getJSON("payments", s.id)) return json({ received: true, duplicate: true });
   const kind = s.metadata?.kind;
   if (kind === "subscription" && s.status === "complete") return json({ received: true, ...(await onSubscribe(s, base)) });
+  // A promo code for the full price leaves nothing to pay: Stripe marks it "no_payment_required", and the audit still starts.
+  if (kind === "signup" && s.status === "complete" && s.payment_status === "no_payment_required") return json({ received: true, ...(await onSignup(s, base)) });
   if (s.payment_status !== "paid") return json({ received: true });
   if (kind === "signup") return json({ received: true, ...(await onSignup(s, base)) });
   if (kind !== "recheck") return json({ received: true });

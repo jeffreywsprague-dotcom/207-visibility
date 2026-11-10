@@ -29,10 +29,14 @@ export async function allSignups() {
 }
 
 // Founding spots are taken by paid sign-ups only, so an abandoned checkout never uses one up.
+// Founding spots are for owners who found you on their own. A sign-up that used one of your promo codes,
+// a test payment (Stripe test mode or a sandbox, or one you marked as a test) or a dismissed sign-up doesn't use one up.
+export const isTestSignup = (s) => !!s.test || /^cs_test_/.test(s.stripeSession || "");
+export const usesFoundingSpot = (s) => !!(s.founding && s.paidAt && s.status !== "dismissed" && !(s.discountCents > 0) && !isTestSignup(s));
 export async function foundingLeft() {
   const st = billingSettings();
   if (!st.foundingSpots) return 0;
-  const used = (await allSignups()).filter((s) => s.founding && s.paidAt).length;
+  const used = (await allSignups()).filter(usesFoundingSpot).length;
   return Math.max(0, st.foundingSpots - used);
 }
 
@@ -114,7 +118,7 @@ export function clientFromSignup(s) {
 // Records the payment (Stripe or marked by hand) and starts the first audit. Safe to call twice.
 export async function paySignup(signup, pay, base) {
   if (!signup.paidAt) {
-    Object.assign(signup, { paidAt: new Date().toISOString(), paidCents: pay.amountCents ?? signup.priceCents, paidBy: pay.by || "stripe",
+    Object.assign(signup, { paidAt: new Date().toISOString(), paidCents: pay.amountCents ?? signup.priceCents, discountCents: pay.discountCents || 0, ...(pay.test ? { test: true } : {}), paidBy: pay.by || "stripe",
       customerId: pay.customerId || signup.customerId || null, stripeSession: pay.session || signup.stripeSession || null, status: "paid" });
     await setJSON("signups", signup.id, signup);
   }

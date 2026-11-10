@@ -84,6 +84,7 @@ aside.card{position:sticky;top:18px;}
 .price b{font-size:2.4rem;letter-spacing:-.03em;color:var(--ink);line-height:1;}
 .price s{color:var(--faint);font-size:1.1rem;}
 .price span{color:var(--muted);font-size:.95rem;}
+.promo{font-size:.84rem;color:var(--muted);margin:8px 0 0;}
 .founding{display:inline-block;font-weight:650;font-size:.86rem;color:var(--pass);background:var(--passw);border-radius:8px;padding:6px 10px;margin:6px 0 0;}
 aside h2{font-size:1.15rem;color:var(--ink);margin:0 0 2px;letter-spacing:-.015em;}
 aside h3{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;}
@@ -166,6 +167,7 @@ aside h3{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing
     <h2>Your full audit</h2>
     <div class="price" id="price"><b>$99</b><span>one time</span></div>
     <span class="founding" id="founding" hidden></span>
+    <p class="promo" id="promo" hidden>Have a promo code? You’ll enter it on the payment page.</p>
     <h3>What you get</h3>
     <ul class="incl">
       <li>Your customers’ questions asked on ChatGPT, Gemini with Google Maps, Perplexity, Claude and Google AI Mode, about 540 times, from your town and up to two more</li>
@@ -216,6 +218,7 @@ function showPrices(p) {
   $("#price").innerHTML = `<b>${money(audit)}</b>${f && f.audit < p.audit ? `<s>${money(p.audit)}</s>` : ""}<span>one time</span>`;
   $("#founding").hidden = !f;
   if (f) $("#founding").textContent = `Founding price: ${f.left} of ${f.spots} spots left`;
+  $("#promo").hidden = p.mode !== "stripe";
   $("#monthlyLine").textContent = `${money(monthly)} a month${f ? ", your founding price, kept while you stay" : ""}`;
   if (p.mode !== "stripe") {
     $("#go").innerHTML = `Sign up for my audit <span aria-hidden="true">→</span>`;
@@ -265,7 +268,7 @@ function showDone(kind, v) {
   const email = (v && v.email) || (saved && saved.email) || "";
   const name = clean((v && v.business) || (saved && saved.business));
   $("#title").textContent = kind === "paid" ? "Thank you. Your audit is running." : "Thank you. You’re signed up.";
-  $("#lede").textContent = kind === "paid" ? "Payment received." : "Next, a secure payment link.";
+  $("#lede").textContent = kind === "paid" ? "You’re all set." : "Next, a secure payment link.";
   $("#doneCard").innerHTML = "";
   const h2 = document.createElement("h2"), p1 = document.createElement("p"), p2 = document.createElement("p"), p3 = document.createElement("p");
   h2.textContent = kind === "paid" ? `${name || "Your"}${name ? "’s" : ""} audit is under way.` : "We’ve got your details.";
@@ -273,7 +276,7 @@ function showDone(kind, v) {
     ? "We’re asking your customers’ questions on five AI platforms now. We review every audit before it goes out."
     : `We’ll email you a secure payment link${email ? ` at ${email}` : ""} within 2 business days. Your audit starts as soon as it’s paid.`;
   p2.textContent = kind === "paid"
-    ? `Within 2 business days you’ll get an email${email ? ` at ${email}` : ""} with the link to your private dashboard and your plan. Your receipt is on its way from Stripe.`
+    ? `Within 2 business days you’ll get an email${email ? ` at ${email}` : ""} with the link to your private dashboard and your plan. If you paid by card, your receipt is on its way from Stripe.`
     : "You won’t be charged anything until then.";
   p3.innerHTML = "Questions? Reply to any email from us. <a href=\"/\">Back to the home page</a>";
   $("#doneCard").append(h2, p1, p2, p3);

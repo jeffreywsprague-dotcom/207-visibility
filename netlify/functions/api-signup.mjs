@@ -55,6 +55,7 @@ export default async (req, context) => {
         "line_items[0][price_data][product_data][description]": "Your customers’ questions asked on five AI platforms from up to three towns, your private dashboard, and a step-by-step plan.",
         customer_email: signup.contact.email,
         customer_creation: "always",
+        allow_promotion_codes: "true",       // codes you create in Stripe: a full comp, half off, and so on
         success_url: `${base}/start/?paid=1&s=${encodeURIComponent(signup.id)}`,
         cancel_url: `${base}/start/?cancelled=1`,
         client_reference_id: signup.id,

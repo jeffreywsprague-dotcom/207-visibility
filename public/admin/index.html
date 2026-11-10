@@ -853,7 +853,7 @@ function signupsInbox(su) {
   const row = (s) => h("div", { class: "list-item" },
     h("div", {},
       h("b", { style: "font-size:1.05rem;color:var(--ink)", text: s.business }), " ", h("span", { class: "pill " + STAGE[s.stage][1], text: STAGE[s.stage][0] }),
-      h("div", { class: "muted small", text: `${s.trade} · ${s.town}, ${s.state} · ${money(s.paidCents ?? s.priceCents)}${s.founding ? " (founding)" : ""} · ${dt(s.paidAt || s.createdAt)}` }),
+      h("div", { class: "muted small", text: `${s.trade} · ${s.town}, ${s.state} · ${money(s.paidCents ?? s.priceCents)}${s.discountCents ? ` after ${money(s.discountCents)} off with a promo code` : ""}${s.founding ? " (founding)" : ""}${/^cs_test_/.test(s.stripeSession || "") ? " · test payment" : ""} · ${dt(s.paidAt || s.createdAt)}` }),
       h("div", { class: "small", text: [s.contact.name, s.contact.email, s.contact.phone].filter(Boolean).join(" · ") }),
       s.stage === "stuck" ? h("div", { class: "small err", text: `Stopped: ${s.stuck.map((e) => (e === "site" ? "website check" : ENG_SHORT[e] || e)).join(", ")}. Open the audit to resume it, or finish without that platform.` }) : null,
       s.short && s.stage === "review" ? h("div", { class: "small err", text: `Only ${s.short.got} of ${s.short.expected} questions got an answer. Open the audit and press Retry on each platform that came up short before you review it.` }) : null,

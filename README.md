@@ -156,6 +156,16 @@ Owners sign up and pay on their own; your one hands-on job is checking each firs
 
 The home page, the sign-up page and the dashboards all read these, so a change shows everywhere after the next deploy.
 
+**Promo codes** (a full comp, half off, anything else) are made in Stripe, not in the code, and work on the audit checkout only:
+1. In Stripe, go to **Product catalog → Coupons → Create coupon**. Choose **Percentage discount**, `100` for a comp or `50` for half off, duration **Once**.
+2. On that coupon, add a **promotion code**: the word you’ll hand out (`MAINE50`, `FRIEND-COMP`). Set **Limit the number of times this code can be redeemed** and an expiry date if you want it targeted.
+3. Owners enter it on Stripe’s payment page (**Add promotion code**); the sign-up page tells them so. A full comp needs no card.
+- A code stacks on whatever price the page shows, so with a founding spot open, half off is half of the founding price.
+- A sign-up that used a code, a payment made in Stripe’s test mode or sandbox, and a dismissed sign-up **don’t use up a founding spot**. Founding spots are for owners who found you on their own.
+- The monthly plan checkout doesn’t accept codes, so an audit comp can’t become a free subscription.
+- Codes made in the sandbox only work in the sandbox. Make them again in live mode.
+- Your alert email and the sign-up’s row in the console say when a code was used and how much it took off.
+
 **What you need switched on before strangers pay:** Stripe (below, including the two subscription events and the customer portal), and email sending (`RESEND_API_KEY` and `NOTIFY_FROM_EMAIL`, under Monthly summaries), so the dashboard link and your alerts go out on their own. Set `CONTACT_EMAIL` too: owners’ replies go there.
 
 ## Quick checks from the dashboard
