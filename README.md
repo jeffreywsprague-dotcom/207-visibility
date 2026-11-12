@@ -132,6 +132,8 @@ Owners sign up and pay on their own; your one hands-on job is checking each firs
 
 **Fixing a misspelled business name after an audit:** correct it on the client page (Edit), then press **Re-score** on the audit. The audit takes the corrected name (yours or a competitor’s), keeps the old spelling as an alias, re-reads every saved answer and tells you what it renamed. Then press **Re-check website and listings** so that business’s Google rating and reviews are looked up under the right name. Only corrections are applied: if a slot now holds a different business, the audit keeps the one it was run against, and the new one is measured from the next audit.
 
+**Which kinds of business the questions fit:** each kind of business gets two questions about its own work (`PROFILES` in `netlify/lib/questions.mjs`, copied into the home page so the free check asks the same things). Businesses nobody calls in an emergency (salons, daycares, agents, banks, inns, shops) get walk-in, openings or specific-need questions in place of the "Emergency…" pair, and the plan words those steps to match. Shops get a general retail set; anything else gets general questions that always name the business type. When a sign-up's type is in the general, shop or not-a-fit group, your sign-up email and its row in the console say so: read the question list on the audit before you release it, and add custom questions on the client page for what they're known for. The full list is in the project doc "Business types the audit fits". To add a type, add one line to `PROFILES` in both files; `tests/question-fit.test.mjs` checks every type on the list.
+
 **How a step reads on the dashboard:** a title and when, one or two sentences on why it matters (with their numbers), a numbered **How to do it** list, then **Benchmarks** (or **Checklist and benchmarks** when the step has listings to tick off). The plan is the second tab, and the dashboard’s top section and **Your next steps** both have an **Open your plan** button.
 
 **What the owner can do on their own:** each plan step has a short **How to do it** list (Suggest writes it; edit it in the plan editor’s “How to do it” box, one line per step). **Your business details** at the bottom of their plan lets them correct their website, phone numbers, hours and address; the change is logged in the client’s notes and used from the next measurement on.
@@ -158,10 +160,11 @@ The home page, the sign-up page and the dashboards all read these, so a change s
 
 **Promo codes** (a full comp, half off, anything else) are made in Stripe, not in the code, and work on the audit checkout only:
 1. In Stripe, go to **Product catalog → Coupons → Create coupon**. Choose **Percentage discount**, `100` for a comp or `50` for half off, duration **Once**.
-2. On that coupon, add a **promotion code**: the word you’ll hand out (`MAINE50`, `FRIEND-COMP`). Set **Limit the number of times this code can be redeemed** and an expiry date if you want it targeted.
+2. On that coupon, add a **promotion code**: the word you’ll hand out (`MAINE50`, `FRIENDCOMP`). Type your own in the code box, letters and numbers only; the coupon’s ID is Stripe’s internal label, not the code. Set **Limit the number of times this code can be redeemed** and an expiry date if you want it targeted.
 3. Owners enter it on Stripe’s payment page (**Add promotion code**); the sign-up page tells them so. A full comp needs no card.
 - A code stacks on whatever price the page shows, so with a founding spot open, half off is half of the founding price.
 - A sign-up that used a code, a payment made in Stripe’s test mode or sandbox, and a dismissed sign-up **don’t use up a founding spot**. Founding spots are for owners who found you on their own.
+- If a sign-up of your own was counted as real (one you marked paid by hand, say), press **Mark as a test** on its row in the console’s Sign-ups box. The row says whether each sign-up holds a founding spot, and the box’s Prices line shows how many are left.
 - The monthly plan checkout doesn’t accept codes, so an audit comp can’t become a free subscription.
 - Codes made in the sandbox only work in the sandbox. Make them again in live mode.
 - Your alert email and the sign-up’s row in the console say when a code was used and how much it took off.

@@ -6,6 +6,7 @@ import { json, baseUrl } from "../lib/http.mjs";
 import { getJSON, setJSON, listKeys } from "../lib/store.mjs";
 import { runRecheck } from "../lib/recheck.mjs";
 import { normalizeClient } from "../lib/clients.mjs";
+import { tradeFit } from "../lib/questions.mjs";
 import { paySignup, money, alertFounder } from "../lib/billing.mjs";
 
 export const config = { path: "/api/stripe-webhook" };
@@ -35,13 +36,14 @@ async function onSignup(s, base) {
   // Starting is safe to repeat: if this crashes part-way, Stripe sends the event again and it picks up where it stopped.
   const already = !!signup.auditKey;
   const discount = s.total_details?.amount_discount || 0;
-  const { client, audit, error, pending } = await paySignup(signup, { amountCents: s.amount_total, discountCents: discount, customerId: s.customer || null, session: s.id }, base);
+  const { client, audit, error, pending } = await paySignup(signup, { amountCents: s.amount_total, discountCents: discount, test: s.livemode === false, customerId: s.customer || null, session: s.id }, base);
   await setJSON("payments", s.id, { id: s.id, kind: "signup", signupId: signup.id, amountCents: s.amount_total, currency: s.currency, email: s.customer_details?.email || null,
     at: new Date().toISOString(), clientId: client?.id || null, auditKey: audit?.key || null, error: error || undefined });
   if (already || pending) return { started: !!audit, duplicate: true };
   await alertFounder(`${s.amount_total === 0 ? "new comped sign-up" : "new paid sign-up"}: ${signup.business}`, [
     `${signup.contact.name} ${s.amount_total === 0 ? "signed up with a promo code for the full price (no charge)" : `paid ${money(s.amount_total ?? signup.priceCents)}${discount ? ` after ${money(discount)} off with a promo code` : ""}`} for ${signup.business} (${signup.trade}, ${signup.town})${signup.founding ? ", founding price" : ""}.`,
-    error ? `The audit couldn’t start: ${error}. Press Start audit on their sign-up in the console.` : "Their audit is running now. You’ll get another email when it’s ready for review."
+    error ? `The audit couldn’t start: ${error}. Press Start audit on their sign-up in the console.` : "Their audit is running now. You’ll get another email when it’s ready for review.",
+    ...(tradeFit(signup.trade).note ? [`Heads up, “${signup.trade}”: ${tradeFit(signup.trade).note}`] : [])
   ], client ? `${base}/admin/#client/${client.id}` : `${base}/admin/`);
   return { started: !!audit };
 }

@@ -1893,7 +1893,11 @@ function attentionItems(ctx) {
     return { q, yv, best };
   }).filter((x) => x.yv?.n && x.best && x.best.v.low > x.yv.high).sort((a, b) => (b.best.v.rate - b.yv.rate) - (a.best.v.rate - a.yv.rate)).slice(0, 2);
   for (const x of qrows) {
-    const [type, youDo, usDo] = QMOVES[x.q.group] || ["other", null, "Open the answers to see which sites AI relies on for this question, and get onto them."];
+    // A business nobody calls in an emergency (a salon, an agent, an inn) is asked about walk-ins, openings and specific needs instead.
+    const soft = ![...S.questions.values()].some((q) => q.id === "emergency");
+    const SOFT = { "Need it now": ["hours", "If you take walk-ins, last-minute bookings or new customers, say so in those words.", "Say plainly on your site and listings how soon you can take someone."],
+      "A specific job": ["towns", "Answer it in the first two sentences, in plain words.", "Add a page to your website that answers this, so AI has something of yours to cite."] };
+    const [type, youDo, usDo] = (soft && SOFT[x.q.group]) || QMOVES[x.q.group] || ["other", null, "Open the answers to see which sites AI relies on for this question, and get onto them."];
     items.push({ id: "q-" + x.q.id, tier: "next", type, keys: ["group:" + x.q.group], title: `When customers ask “${x.q.text}”, AI picks ${x.best.c.name}`,
       what: `${x.best.c.name} is named in ${tenPhrase(x.best.v)}; you in ${tenPhrase(x.yv)}.`, you: youDo, us: usDo, proof: { kind: "question", qid: x.q.id } });
   }

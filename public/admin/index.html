@@ -337,7 +337,7 @@ const STEP_PATTERNS = [
   [/^claim and complete your google|^get into chatgpt|^strengthen your google maps profile|^win google.s ai mode|^make sure claude finds/, "core-listings"],
   [/^get listed and accurate on|^get listed on .+, and check your|^check your .+ pages?$/, "cited-sites"], [/^add pages for/, "towns"], [/^give perplexity pages/, "pages-perplexity"],
   [/^make your emergency|^make your hours and emergency/, "group:Need it now"], [/^make sure ai knows when you.re open/, "group:Right now"],
-  [/^add a page for each job/, "group:A specific job"], [/^name the dishes/, "group:A specific craving"],
+  [/^add a page for each (job|thing)/, "group:A specific job"], [/^say plainly how soon/, "group:Need it now"], [/^name the dishes/, "group:A specific craving"],
   [/^publish price ranges/, "group:Price and trust"], [/^answer the planning questions/, "group:Plans and logistics"],
   [/^get listed on efficiency maine|^answer the maine questions/, "group:Only in Maine"], [/^build your statewide reputation/, "group:Anywhere in Maine"],
   [/^build the reputation behind/, "group:Price and trust"],
@@ -383,6 +383,8 @@ function ownerPlan(audit, s, site, opts) {
     citedHave: ["Open your page on each site and compare it with your Google profile: name, address, phone and hours.", "Claim the page if you haven’t (look for “claim this business”), then correct anything that differs.", "Add your services, the towns you serve and a few recent photos.", "Tick each site off in the checklist below as you finish it."],
     cited: ["On each site, search for your business first: there may already be a page you can claim.", "Claim it or create a profile. Most let you list for free; you don’t need a paid plan to be listed.", "Use the same name, address, phone and hours as your Google profile.", "Add your services and the towns you serve.", "Tick each site off in the checklist below as you finish it."],
     towns: (towns) => [`Add one page per town to your website, titled like “${tradeCap} in ${towns[0] || "your town"}, Maine”.`, "On each page, describe two or three real jobs you did there, with photos.", "Link to each town page from your home page, using the town’s name in the link.", "Add the same towns to your service area in Google Business Profile.", CHECK],
+    needs: ["Make a page for each of these, titled the way customers ask for it.", "Answer the question in the first two sentences, in plain words.", "Add what people want to know before they call: what it costs, how it works and how to get started.", "Link to each page from your home page or menu."],
+    soon: ["Say it in plain words on your home page: whether you take walk-ins, same-day or last-minute bookings, or new customers right now.", "Add the same line to your Google Business Profile description.", "Keep your hours current on Google, Bing, Apple Maps and Yelp.", "When it’s done, press “Check website and Google” at the top of your plan."],
     jobs: ["Make a page for each job, named the way customers ask for it.", "Show real local projects with a photo and a line or two about each.", "Answer what customers ask: roughly what it costs, how long it takes, and when you can start.", "Link to each page from your home page or menu."],
     hours: ["Put your hours on your home page or contact page as text, not inside an image.", "Set the same hours on Google, Bing, Apple and Yelp, and add holiday and seasonal hours.", "If you take emergency or same-day calls, say so in those words on your site and in your Google profile description.", CHECK],
     price: ["Add a short page with typical price ranges for your most common jobs.", "List what makes a job cost more or less.", "Say how to get an exact quote from you."],
@@ -475,7 +477,7 @@ function ownerPlan(audit, s, site, opts) {
 
   // 7. The kinds of questions where they're weakest
   const food = (s.questions || []).some((q) => q.id === "crave1");
-  const em = /plumb|hvac|heat|air|electric|insulat|solar|energy|weather/.test(tradeWord);
+  const em = /\bplumb|\bhvac|\bheat(ing| pumps?)?\b|\bair.?condition|\bfurnace|\bboiler|\belectric|insulat|energy audit|weatheriz/.test(tradeWord);
   const G = {
     "Need it now": ["Make your emergency and same-day service plain", "hours", "AI only recommends you for urgent jobs if your website and listings say you take them, in those words."],
     "Right now": ["Make sure AI knows when you’re open", "hours", "“Open now” answers come from the hours AI can read on your website and listings."],
@@ -494,6 +496,14 @@ function ownerPlan(audit, s, site, opts) {
   const used = [];
   const PAGES = { "A specific job": "AI quotes pages that name the job, so a page per service gives it something of yours to cite.",
     "Only in Maine": "Seasonal and Maine-specific questions go to businesses whose pages answer them." };
+  // A business nobody calls in an emergency (a salon, an agent, a bank, an inn) is asked different questions in
+  // these two groups, so the steps are worded for those.
+  const urgentTrade = s.questions.some((q) => q.id === "emergency");
+  if (!urgentTrade) {
+    G["Need it now"] = ["Say plainly how soon you can take someone", "hours", "AI only says a business takes walk-ins, has openings or responds quickly when its website and listings say so in plain words."];
+    G["A specific job"] = ["Add a page for each thing customers ask you for", "towns", "AI quotes pages that answer exactly what was asked, so a page for each gives it something of yours to cite."];
+    PAGES["A specific job"] = G["A specific job"][2];
+  }
   // Merges into a step already in the plan are always made; a new step only while there are fewer than three.
   for (const x of gaps) {
     let [title, type, why] = G[x.g], q = qFor(x.g);
@@ -522,7 +532,7 @@ function ownerPlan(audit, s, site, opts) {
       }
       if (own >= 3) continue;
       used.push(x);
-      pagesStep = add({ keys: ["group:" + x.g], how: HOW.jobs, title: "Add a page for each job customers ask about", type: "towns", when: "This month", detail: `${found} ${PAGES[x.g]}` });
+      pagesStep = add({ keys: ["group:" + x.g], how: urgentTrade ? HOW.jobs : HOW.needs, title: urgentTrade ? "Add a page for each job customers ask about" : "Add a page for each thing customers ask you for", type: "towns", when: "This month", detail: `${found} ${PAGES[x.g]}` });
       own++; continue;
     }
     // Emergency service and opening hours are one fix: say it plainly, everywhere.
@@ -535,7 +545,7 @@ function ownerPlan(audit, s, site, opts) {
     if (own >= 3) continue;
     used.push(x);
     const hoursToo = type === "hours" && f("Hours not found") ? ` We didn’t find your hours on ${readWhere}.` : "";
-    const GH = { "Need it now": HOW.hours, "Right now": HOW.hours, "A specific craving": HOW.menu, "Price and trust": HOW.price, "Plans and logistics": HOW.logistics, "Only in Maine": em ? HOW.emaine : HOW.jobs, "Anywhere in Maine": HOW.state };
+    const GH = { "Need it now": urgentTrade ? HOW.hours : HOW.soon, "Right now": HOW.hours, "A specific craving": HOW.menu, "Price and trust": HOW.price, "Plans and logistics": HOW.logistics, "Only in Maine": em ? HOW.emaine : HOW.jobs, "Anywhere in Maine": HOW.state };
     const st = add({ keys: ["group:" + x.g], how: GH[x.g] || [], title, type, when: "This month", detail: `${found} ${why}${hoursToo}` });
     own++;
     if (type === "hours") hoursStep = st;
@@ -853,10 +863,11 @@ function signupsInbox(su) {
   const row = (s) => h("div", { class: "list-item" },
     h("div", {},
       h("b", { style: "font-size:1.05rem;color:var(--ink)", text: s.business }), " ", h("span", { class: "pill " + STAGE[s.stage][1], text: STAGE[s.stage][0] }),
-      h("div", { class: "muted small", text: `${s.trade} · ${s.town}, ${s.state} · ${money(s.paidCents ?? s.priceCents)}${s.discountCents ? ` after ${money(s.discountCents)} off with a promo code` : ""}${s.founding ? " (founding)" : ""}${/^cs_test_/.test(s.stripeSession || "") ? " · test payment" : ""} · ${dt(s.paidAt || s.createdAt)}` }),
+      h("div", { class: "muted small", text: `${s.trade} · ${s.town}, ${s.state} · ${money(s.paidCents ?? s.priceCents)}${s.discountCents ? ` after ${money(s.discountCents)} off with a promo code` : ""}${s.spot ? " · holds a founding spot" : s.founding ? " (founding price)" : ""}${s.isTest ? " · test, doesn’t use a founding spot" : ""} · ${dt(s.paidAt || s.createdAt)}` }),
       h("div", { class: "small", text: [s.contact.name, s.contact.email, s.contact.phone].filter(Boolean).join(" · ") }),
       s.stage === "stuck" ? h("div", { class: "small err", text: `Stopped: ${s.stuck.map((e) => (e === "site" ? "website check" : ENG_SHORT[e] || e)).join(", ")}. Open the audit to resume it, or finish without that platform.` }) : null,
       s.short && s.stage === "review" ? h("div", { class: "small err", text: `Only ${s.short.got} of ${s.short.expected} questions got an answer. Open the audit and press Retry on each platform that came up short before you review it.` }) : null,
+      s.fit?.note ? h("div", { class: "small err", text: `Heads up, “${s.trade}”: ${s.fit.note}` }) : null,
       s.dup ? h("div", { class: "small err", text: `Heads up: ${s.dup} is already a client. This may be a second sign-up for the same business.` }) : null,
       s.error ? h("div", { class: "small err", text: s.error }) : null),
     h("div", { class: "row", style: "justify-content:flex-end" },
@@ -865,8 +876,9 @@ function signupsInbox(su) {
       ["running", "released"].includes(s.stage) && s.clientId ? h("a", { class: "btn quiet", href: `#client/${s.clientId}`, text: "Open" }) : null,
       s.stage === "start" ? h("button", { class: "btn", onclick: (e) => act(e, s, "start"), text: "Start audit" }) : null,
       s.stage === "requested" ? h("button", { class: "btn", onclick: (e) => act(e, s, "start", `Mark ${s.business} as paid (${money(s.priceCents)}) and start their audit?`), text: "Paid: start audit" }) : null,
+      s.paidAt && !/^cs_test_/.test(s.stripeSession || "") ? h("button", { class: "btn quiet", title: s.isTest ? "Count this as a real customer again" : "Your own run-through: it won’t use a founding spot", onclick: (e) => act(e, s, "test"), text: s.isTest ? "Not a test" : "Mark as a test" }) : null,
       ["requested", "abandoned"].includes(s.stage) ? h("button", { class: "btn quiet", onclick: (e) => act(e, s, "dismiss", `Dismiss ${s.business}?`), text: "Dismiss" }) : null));
-  const prices = `${money(st.auditCents)} audit · ${money(st.monthlyCents)} a month${st.yearlyCents ? ` · ${money(st.yearlyCents)} a year` : ""}${st.foundingSpots ? ` · founding: ${money(st.foundingAuditCents)} audit, ${money(st.foundingMonthlyCents)} a month, first ${st.foundingSpots}` : ""}`;
+  const prices = `${money(st.auditCents)} audit · ${money(st.monthlyCents)} a month${st.yearlyCents ? ` · ${money(st.yearlyCents)} a year` : ""}${st.foundingSpots ? ` · founding: ${money(st.foundingAuditCents)} audit, ${money(st.foundingMonthlyCents)} a month, ${st.foundingLeft ?? st.foundingSpots} of ${st.foundingSpots} spots left` : ""}`;
   return h("div", { class: "card" + (need.length + (su.stopped || []).length ? " leads" : "") },
     h("h2", { text: (su.stopped || []).length ? `Sign-ups and audits needing you (${need.length + su.stopped.length})` : need.length ? `Sign-ups needing you (${need.length})` : "Sign-ups" }),
     h("p", { class: "sub small", text: `Owners sign up and pay at /start/. Each first audit waits here for you to review before the owner gets their link. Prices: ${prices}.` }),
