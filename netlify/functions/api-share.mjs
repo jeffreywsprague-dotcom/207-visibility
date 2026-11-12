@@ -190,7 +190,7 @@ export default async (req) => {
     recheck: rc,
     notify: normNotify(client.notify),
     analytics: { connected: !!client.ga4PropertyId, email: ga4Settings().email },
-    client: { business: client.business, trade: client.trade, town: client.town, state: client.state, radius: client.radius, website: client.website },
+    client: { business: client.business, trade: client.trade, town: client.town, state: client.state, radius: client.radius, website: client.website, claimed: client.claimed || [] },
     audits: out,
     plan: (client.plan || []).map(({ id, type, title, detail, how, when, status, doneAt, goals, extra, checks, keys }) => ({ id, type, title, detail, how: how || [], when, status, doneAt, goals: goals || {}, extra: extra || [], checks: checks || {}, keys: keys || [] })),
     details: detailsFor(client),

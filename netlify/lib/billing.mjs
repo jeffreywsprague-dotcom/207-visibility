@@ -2,7 +2,7 @@
 // paid sign-up into a client and its first audit, and releasing the reviewed audit to the owner.
 import { randomBytes } from "node:crypto";
 import { getJSON, setJSON, listKeys } from "./store.mjs";
-import { normalizeClient } from "./clients.mjs";
+import { normalizeClient, claimedList } from "./clients.mjs";
 import { startAudit } from "./plan.mjs";
 import { sendOne, alertFounder, cleanEmail, cleanPhone } from "./notify.mjs";
 
@@ -89,6 +89,7 @@ export function readSignup(b) {
     phones: phones.join(", "), address: cap(b.address, 160), hours: cap(b.hours, 120),
     targetTowns: String(b.targets || "").split(/[,;\n]/).map((t) => cap(t, 40)).filter(Boolean).slice(0, 2),   // the audit asks from the main town plus two more
     competitors: competitorsFrom(b.rivals),
+    claimed: claimedList(b.claimed),
     contact: { name: cap(b.name, 80), email: cleanEmail(b.email), phone: cleanPhone(b.mobile) || cap(b.mobile, 25) },
     notes: cap(b.notes, 1000)
   };
@@ -103,7 +104,7 @@ export function readSignup(b) {
 export function clientFromSignup(s) {
   return normalizeClient({
     business: s.business, trade: s.trade, town: s.town, state: s.state, radius: s.radius, website: s.website,
-    competitors: s.competitors, testTowns: s.targetTowns,
+    competitors: s.competitors, testTowns: s.targetTowns, claimed: s.claimed || [],
     facts: { phone: s.phones, hours: s.hours, address: s.address },
     tracking: false,
     // The dashboard link and monthly summaries go to the email they signed up with.

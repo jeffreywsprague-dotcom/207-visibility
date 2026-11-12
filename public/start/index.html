@@ -68,6 +68,9 @@ textarea{min-height:70px;resize:vertical;}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--bright);}
 [aria-invalid="true"]{border-color:var(--fail);}
 .hint{display:block;margin-top:5px;font-size:.82rem;color:var(--muted);line-height:1.4;}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;}
+.checks label.inline{margin:0;}
+@media (max-width:560px){.checks{grid-template-columns:1fr;}}
 .inline{display:flex;align-items:center;gap:8px;font-weight:500;font-size:.88rem;color:var(--muted);margin:8px 0 0;}
 .inline input{width:auto;margin:0;}
 .agree{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;align-items:start;font-weight:500;font-size:.9rem;color:var(--text);background:var(--panel);border-radius:10px;padding:12px 14px;margin:0;}
@@ -133,6 +136,16 @@ aside h3{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing
             <span class="hint">We check whether AI gives out the right number. If you use more than one, separate them with commas.</span></div>
           <div><label for="address">Business address <small>(optional)</small></label><input id="address" autocomplete="street-address"><span class="hint">Leave blank if you go to your customers.</span></div>
           <div><label for="hours">Hours <small>(optional)</small></label><input id="hours" placeholder="Mon–Fri 7–4"></div>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Listings you’ve already claimed <small>(optional)</small></legend>
+        <p class="hint" style="margin:0 0 10px">Tick any you’ve already claimed and filled in. We’ll leave those out of your plan. Not sure? Leave it blank.</p>
+        <div class="checks">
+          <label class="inline"><input type="checkbox" class="claimed" value="google"> Google Business Profile</label>
+          <label class="inline"><input type="checkbox" class="claimed" value="bing"> Bing Places</label>
+          <label class="inline"><input type="checkbox" class="claimed" value="apple"> Apple Maps (Business Connect)</label>
+          <label class="inline"><input type="checkbox" class="claimed" value="yelp"> Yelp</label>
         </div>
       </fieldset>
       <fieldset>
@@ -204,10 +217,11 @@ const saved = read(KEY), snap = read(SNAP);
 const start = saved || (snap ? { business: snap.business, trade: snap.trade, town: snap.town, state: snap.state, radius: snap.radius, website: snap.website, nosite: snap.nosite, targets: snap.targets, rivals: snap.rivals } : {});
 for (const id of FIELDS) if (start[id] != null && start[id] !== "") { const el = $("#" + id); if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === String(start[id]))) el.append(new Option(start[id], start[id])); el.value = start[id]; }
 $("#nosite").checked = !!start.nosite;
+for (const x of document.querySelectorAll(".claimed")) x.checked = Array.isArray(start.claimed) && start.claimed.includes(x.value);
 const siteState = () => { $("#website").disabled = $("#nosite").checked; };
 siteState();
 $("#nosite").addEventListener("change", () => { siteState(); keep(); });
-function values() { const v = Object.fromEntries(FIELDS.map((id) => [id, clean($("#" + id).value)])); v.nosite = $("#nosite").checked; return v; }
+function values() { const v = Object.fromEntries(FIELDS.map((id) => [id, clean($("#" + id).value)])); v.nosite = $("#nosite").checked; v.claimed = [...document.querySelectorAll(".claimed:checked")].map((x) => x.value); return v; }
 function keep() { write(KEY, values()); }
 $("#f").addEventListener("input", keep);
 

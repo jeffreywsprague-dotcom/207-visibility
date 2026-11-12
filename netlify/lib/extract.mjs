@@ -1,7 +1,7 @@
 // Reads an AI answer: which tracked businesses are named, in what order, which sites
 // are cited, and which other businesses appear (the ones winning instead).
 
-const SUFFIX = new Set(["company", "co", "inc", "llc", "ltd", "corp", "corporation", "the", "services", "service", "and", "of", "me", "maine"]);
+const SUFFIX = new Set(["company", "co", "inc", "llc", "ltd", "corp", "corporation", "the", "services", "service", "and", "of", "me", "maine", "realty", "realtors"]);
 
 export function norm(s) {
   return " " + String(s || "")
@@ -36,7 +36,8 @@ export function firstIndex(normText, aliases) {
   return best;
 }
 
-const LIST_RE = /^\s*(?:\d+[.)]|[-*•]|#{1,4})\s+/;
+// A pick can also be a bold line of its own: "**1. Adam Parent — Maine Real Estate Co.**".
+const LIST_RE = /^\s*(?:\*\*\s*\d+[.)]|\d+[.)]|[-*•]|#{1,4})\s+/;
 
 // Split an answer into recommendation items (numbered/bulleted lines or headings).
 export function listItems(text) {
@@ -62,9 +63,21 @@ const GENERIC = new Set(("phone number numbers location locations address addres
   // Headings AI adds around its picks ("🏆 My Recommendation", "One quick question", "Honorable mentions")
   "my our quick question questions one honorable honourable mention mentions runner runners up winner winners choice choices shortlist list " +
   "comparison compare glance budget value premium standout standouts contender contenders regional worth checking out considering another strong solid").split(/\s+/));
+// Phrases that describe a pick rather than name one: a fact about it ("Based in Scarborough",
+// "Ranked among the top agents") or the heading over the list ("Top Real Estate Agents in Scarborough").
+const FACT_RE = new RegExp("^(?:" + [
+  "(?:based|located|headquartered|situated) (?:in|at|near|out of|just)\\b",
+  "(?:ranked|rated|named|recognized|recognised|voted|listed) (?:among|in|as|by|no|number|one|top|first|second|third|\\d)",
+  "(?:serving|serves|covers|covering) (?:the|all|greater|southern|northern|central|coastal|midcoast|western|eastern)\\b",
+  "(?:specializes|specialises|specializing|specialising|focused|focuses) (?:in|on)\\b",
+  "(?:licensed|founded|established|completed|closed|sold) (?:in|since|by|over|more|\\d)",
+  "(?:approximately|about|over|more than|nearly|around|roughly) \\d"
+].join("|") + ")");
+const HEADING_RE = /^(?:the\s+)?(?:top|best|leading|other|more|additional|notable|recommended|popular|local)\b.*\s(?:in|near|around|for|serving)\s/;
 export function isLabel(name) {
-  const words = String(name || "").toLowerCase().replace(/\*|_/g, "").replace(/[^a-z0-9&' ]+/g, " ").trim().split(/\s+/).filter(Boolean);
-  return !words.length || (words.length <= 5 && words.every((w) => GENERIC.has(w)));
+  const flat = String(name || "").toLowerCase().replace(/\*|_/g, "").replace(/[^a-z0-9&' ]+/g, " ").replace(/\s+/g, " ").trim();
+  const words = flat.split(/\s+/).filter(Boolean);
+  return !words.length || (words.length <= 5 && words.every((w) => GENERIC.has(w))) || FACT_RE.test(flat) || HEADING_RE.test(flat);
 }
 
 // Guess the business name at the start of a list item: "**Acme Fence** – great reviews" -> "Acme Fence".
@@ -97,6 +110,7 @@ export function analyze(answer, entities) {
   const nt = norm(text);
   const items = listItems(text);
   const itemNorms = items.map(norm);
+  const picks = items.map((it) => { const n = leadName(it); return !!n && !isLabel(n); });
   const placeNorms = (answer.places || []).map(norm);
   const result = {};
   for (const e of entities) {
@@ -106,7 +120,8 @@ export function analyze(answer, entities) {
     let rank = null;
     if (items.length) {
       const r = itemNorms.findIndex((it) => al.some((a) => it.includes(" " + a + " ")));
-      if (r >= 0) rank = r + 1;
+      // Its place among the picks: headings over the list and the facts bulleted under each pick don't count.
+      if (r >= 0) rank = 1 + picks.slice(0, r).filter(Boolean).length;
     }
     if (rank == null && inPlaces >= 0) rank = inPlaces + 1;
     result[e.id] = { named: idx >= 0 || inPlaces >= 0, pos: idx, rank };

@@ -315,3 +315,20 @@ If a platform shows errors, the progress panel shows the message. Common causes:
 - **Netlify plan:** the Free plan includes background functions, but its credits are limited (each production deploy uses 15). Once you have paying clients, the Personal or Pro plan gives more room.
 - **Perplexity** runs through its Agent API; its older Sonar API was retired in September 2026.
 - Data (clients, audits, answers) is stored in **Netlify Blobs** on your site. Deleting an audit in the console removes its answers.
+
+
+## Wording by kind of business, and reading AI's lists (November 12)
+
+- **Jobs, visits or customers.** The console and the dashboard used to say "job" to everyone ("after the job", "every job, every week"). They now pick one of three wordings from the trade and its questions: tradespeople finish *jobs*; a diner, dentist, salon or inn has *visits*; an agent, lawyer or bank has *customers*. The "Publish your hours" step is reworded for appointment businesses ("If you work by appointment, say so").
+- **Agent sites.** When Zillow, Realtor.com, Homes.com, FastExpert, EffectiveAgents and similar sites are among the most cited, the cited-sites step adds that AI quotes recent sales and reviews from them, so each agent's closed sales should be attached to their profile. Those sites now show by name ("Zillow", not "zillow.com").
+- **Who an answer names.** A pick written as a bold line of its own ("**1. Adam Parent — Maine Real Estate Co.**") is now read as a pick. Headings over a list ("Top Real Estate Agents in Scarborough") and facts bulleted under a pick ("Based in Scarborough", "Over 20 years") are no longer mistaken for businesses. "Named first" counts a business's place among the picks, so a heading over the list no longer pushes the first pick to second.
+- **Team names.** "Tomazin Goff Realty" also matches "Tomazin Goff" ("Realty" is treated like "LLC").
+- **Existing audits:** press **Re-score** on the audit to re-read its saved answers under these rules (no new AI charges). Existing plans keep their wording until you edit them or press **Rewrite from latest audit**.
+
+
+## The plan leads with its strongest evidence (November 12)
+
+- **Order.** A plan is now ordered strongest-first, not by "this week / this month". A proven fault (AI turned away from the site, a wrong phone number, no Google listing) leads. After that, each step is weighed by what that kind of work can add to the score (the estimate the dashboard shows) plus the size of the gap the audit measured. "Suggest" and "Rewrite from latest audit" keep that order; steps you write by hand follow the suggested ones. The dashboard's "Your next steps" follows the plan's order too.
+- **The Google, Bing, Apple and Yelp step never assumes.** We can read a Google listing and see when AI cites a Yelp page, but we can't see inside any of those accounts. So the step now says what was verified ("Your Google listing is live, with a phone number, your website and 64 reviews"), is titled "Confirm your ... listings are claimed and complete", carries the tag "A quick check, not a finding" and sits last. It only leads when no Google listing is found, and it moves up (as "Make sure your ... listings are complete") when the weakest platform is one that leans on those listings.
+- **Ask, don't guess.** The sign-up form and the console's client form have four checkboxes for listings the owner has already claimed. Those are left out of the step. If all four are ticked there is no step, and the dashboard lists it under "What's working". The dashboard also reports a live, filled-in Google listing as good news.
+- **Town pages** list the towns with a measured gap first, then towns only missing from the website.

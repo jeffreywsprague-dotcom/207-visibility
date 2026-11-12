@@ -22,6 +22,9 @@ export function normBilling(b) {
   };
 }
 
+export const CORE_LISTINGS = ["google", "bing", "apple", "yelp"];
+export const claimedList = (v) => { const got = (Array.isArray(v) ? v : String(v || "").split(/[,\s]+/)).map((x) => String(x).toLowerCase().trim()); return CORE_LISTINGS.filter((k) => got.includes(k)); };
+
 export function normalizeClient(c) {
   const comps = (Array.isArray(c.competitors) ? c.competitors : String(c.competitors || "").split("\n"))
     .map((row) => {
@@ -43,6 +46,9 @@ export function normalizeClient(c) {
     competitors: comps,
     customQuestions: (Array.isArray(c.customQuestions) ? c.customQuestions : String(c.customQuestions || "").split("\n")).map((q) => String(q).trim()).filter(Boolean).slice(0, 10),
     facts: { phone: String(c.facts?.phone || "").trim(), hours: String(c.facts?.hours || "").trim(), address: String(c.facts?.address || "").trim() },
+    // The core listings the owner says they have already claimed and filled in. The plan leaves those out
+    // rather than guess: we can read a Google listing, but can't see inside any of these accounts.
+    claimed: claimedList(c.claimed),
     tracking: !!c.tracking,
     shareToken: typeof c.shareToken === "string" && c.shareToken.length >= 20 ? c.shareToken : token(),
     plan: (Array.isArray(c.plan) ? c.plan : []).slice(0, 20).map((p, i) => ({

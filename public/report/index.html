@@ -706,7 +706,7 @@ const measLabel = (a) => (isRe(a) ? `${dayName(a.createdAt)} · early re-check`
   : (DATA?.audits || []).filter((x) => !isRe(x) && sameMonth(x.createdAt, a.createdAt)).length > 1 ? dayName(a.createdAt) : monthName(a.createdAt, true));
 const measName = (a) => (isRe(a) ? `the ${new Date(a.createdAt).toLocaleDateString(undefined, { month: "long", day: "numeric" })} re-check` : `the ${monthName(a.createdAt, true)} measurement`);
 const ENGINE_LABEL = { openai: "ChatGPT", gemini: "Gemini", perplexity: "Perplexity", anthropic: "Claude", aimode: "Google AI Mode" };
-const SITE_NAMES = { "yelp.com": "Yelp", "angi.com": "Angi", "houzz.com": "Houzz", "homeadvisor.com": "HomeAdvisor", "bbb.org": "Better Business Bureau", "getfencefind.com": "FenceFind", "facebook.com": "Facebook", "nextdoor.com": "Nextdoor", "google maps": "Google Maps", "tripadvisor.com": "Tripadvisor", "thumbtack.com": "Thumbtack", "visitmaine.com": "Visit Maine", "wanderlog.com": "Wanderlog", "mainetoday.com": "MaineToday" };
+const SITE_NAMES = { "yelp.com": "Yelp", "angi.com": "Angi", "houzz.com": "Houzz", "homeadvisor.com": "HomeAdvisor", "bbb.org": "Better Business Bureau", "getfencefind.com": "FenceFind", "facebook.com": "Facebook", "nextdoor.com": "Nextdoor", "google maps": "Google Maps", "tripadvisor.com": "Tripadvisor", "thumbtack.com": "Thumbtack", "visitmaine.com": "Visit Maine", "wanderlog.com": "Wanderlog", "mainetoday.com": "MaineToday", "visitportland.com": "Visit Portland", "zillow.com": "Zillow", "realtor.com": "Realtor.com", "homes.com": "Homes.com", "redfin.com": "Redfin", "fastexpert.com": "FastExpert", "effectiveagents.com": "EffectiveAgents", "ratemyagent.com": "RateMyAgent", "realtrends.com": "RealTrends", "agentpronto.com": "Agent Pronto", "listwithclever.com": "Clever", "trulia.com": "Trulia" };
 const siteName = (d) => SITE_NAMES[d] || d;
 
 function wilson(k, n, z = 1.96) {
@@ -920,7 +920,7 @@ function stepBenchmarks(p, au, first) {
     const a = num(r.you), b = num(g);
     if (a != null && b != null) r.ok = LOWER_BETTER.has(r.key) ? a <= b : a >= b;
   }
-  const citedShare = (label) => { const k = String(label).toLowerCase().replace(/^the /, ""), hit = Object.entries(st.sources).find(([d]) => siteName(d).toLowerCase().replace(/^the /, "") === k); return hit ? `AI cited it in ${pct(hit[1] / Math.max(1, st.n))} of answers` : ""; };
+  const citedShare = (label) => { const k = String(label).toLowerCase().replace(/^the /, ""), hit = Object.entries(st.sources).find(([d]) => siteName(d).toLowerCase().replace(/^the /, "") === k || d === k); return hit ? `AI cited it in ${pct(hit[1] / Math.max(1, st.n))} of answers` : ""; };
   for (const x of p.extra || []) rows.push({ label: String(x.label).replace(/^the /, "").replace(/^./, (m) => m.toUpperCase()), sub: citedShare(x.label), you: x.you, bench: x.bench, ok: x.met === true ? true : x.met === false ? false : null, goal: true, custom: true, id: `extra:${x.label}` });
   for (const r of rows) if (!r.id && r.key) r.id = `${r.key}:${r.label}`;
   return { rows, note, watch, affects: AFFECTS[type] || AFFECTS.other };
@@ -1342,7 +1342,7 @@ function proofPanel(ctx) {
 function nextPanel(ctx) {
   const plan = DATA.plan || [];
   const WHEN = ["This week", "This month", "Next month", "Ongoing", "Monthly"], wr = (p) => { const i = WHEN.indexOf(p.when); return i < 0 ? 1 : i; };
-  const upcoming = plan.filter((p) => p.status !== "done").sort((a, b) => (a.status === "doing" ? 0 : 1) - (b.status === "doing" ? 0 : 1) || wr(a) - wr(b)).slice(0, 4);
+  const upcoming = plan.filter((p) => p.status !== "done").map((p, i) => ({ p, i })).sort((a, b) => (a.p.status === "doing" ? 0 : 1) - (b.p.status === "doing" ? 0 : 1) || a.i - b.i).map((x) => x.p).slice(0, 4);
   const latest = DATA.audits[DATA.audits.length - 1];
   let waiting = 0;
   for (const p of plan) for (const s of benchFor(p, latest).states.values()) if (s.st === "half") waiting++;
@@ -1354,7 +1354,7 @@ function nextPanel(ctx) {
   }, text: "Copy the text" });
   return h("section", { class: "panel o-next" },
     h("div", { class: "panel-h" }, h("h2", { text: "Your next steps" }), DATA.nextCheck ? h("span", { class: "muted small", text: `Next measurement ${monthDay(DATA.nextCheck)}` }) : null),
-    h("p", { class: "sub", text: "The first steps in your plan, in order." }),
+    h("p", { class: "sub", text: "The first steps in your plan. The ones with the most to gain come first." }),
     upcoming.length ? h("ul", { class: "next" }, upcoming.map((p) => h("li", { class: p.status },
       h("span", { class: "dot", "aria-hidden": "true" }),
       h("div", {}, h("b", { text: p.title }), h("small", { text: p.status === "doing" ? `In progress${p.when ? " · " + p.when : ""}` : p.when || "Planned" })))))
@@ -1362,7 +1362,7 @@ function nextPanel(ctx) {
     waiting ? h("p", { class: "waiting", text: `You’ve marked ${waiting} benchmark${waiting === 1 ? "" : "s"} done. ${DATA.nextCheck ? `We’ll confirm ${waiting === 1 ? "it" : "them"} on ${monthDay(DATA.nextCheck)}.` : "The next measurement will confirm them."}` }) : null,
     upcoming.length ? h("p", { style: "margin:12px 0 0" }, h("button", { type: "button", class: "btn", onclick: () => goTab("plan"), text: "Open your plan" })) : null,
     rev ? h("div", { class: "mine" }, h("h3", { text: "A review request you can send" }),
-      h("p", { class: "muted", text: "Text this to each customer when the job is done, with your Google review link:" }),
+      h("p", { class: "muted", text: WORK.send[workKind(latest)] }),
       h("p", { class: "copytext", id: "reviewtext", text: msg }), copy) : null);
 }
 
@@ -1427,7 +1427,8 @@ function benchPanel(p) {
     h("summary", {}, bm.rows.some((r) => r.custom) ? "Checklist and benchmarks" : "Benchmarks for this step", checkable.length ? h("span", { class: "bm-count", text: ` · ${nFull} of ${checkable.length} met${nHalf ? `, ${nHalf} waiting for a measurement` : ""}` }) : null),
     h("div", { class: "bm-in" },
       h("div", { class: "bm-tags" },
-        impact ? h("span", { class: "bm-tag imp", text: `Estimated impact: ${impact}` }) : h("span", { class: "bm-tag", text: "Completed" }),
+        impact && (p.keys || []).includes("core-listings") && (p.type || "other") === "other" ? h("span", { class: "bm-tag", text: "A quick check, not a finding" })
+          : impact ? h("span", { class: "bm-tag imp", text: `Estimated impact: ${impact}` }) : h("span", { class: "bm-tag", text: "Completed" }),
         bm.affects.map((a) => h("span", { class: "bm-tag", text: a }))),
       bm.rows.length ? h("table", { class: "bm-t" },
         h("thead", {}, h("tr", {}, h("th", { class: "c" }), h("th"), h("th", { text: "You" }), h("th", { text: "Benchmark" }))),
@@ -1460,7 +1461,7 @@ function planTab() {
   const planEl = h("section", { class: "panel c7" },
     h("div", { class: "panel-h" }, h("h2", { text: "Your plan" }), h("span", { class: "muted small", text: `${done} of ${plan.length} done` })),
     h("div", { class: "prog" }, h("i", { style: `width:${(100 * done) / plan.length}%` })),
-    h("p", { class: "sub", text: "Work from the top. Each step says why it matters and how to do it. Tick it when it’s done; its benchmarks turn green when a measurement or a check confirms them." }),
+    h("p", { class: "sub", text: "Work from the top: the steps with the strongest evidence and the most to gain come first. Each one says why it matters and how to do it. Tick it when it’s done; its benchmarks turn green when a measurement or a check confirms them." }),
     siteCheckBar(),
     h("ul", { class: "plan2" }, plan.map((p) => h("li", { class: p.status },
       h("button", { type: "button", class: "tick", role: "checkbox", "aria-checked": p.status === "done" ? "true" : "false", "aria-label": `Mark “${p.title}” ${p.status === "done" ? "not done" : "done"}`, onclick: () => toggle(p) }),
@@ -1816,14 +1817,14 @@ const tenPhrase = (r) => { const w = inTen(r); return w === "never named" ? "no 
 
 // For each kind of question a competitor wins: the plan step type, a tip, and what to do.
 const QMOVES = {
-  "Looking for the best": ["listings", null, "Get listed, with every detail filled in, on the sites AI checks when customers ask for the best: Google, Bing, Apple Maps, Yelp and the directories for your trade."],
+  "Looking for the best": ["listings", null, "Make sure every detail is filled in on the sites AI checks when customers ask for the best: the ones it cited most for you, then Google, Bing, Apple Maps and Yelp."],
   "Need it now": ["hours", "If you take emergency or same-day jobs, say so in those words.", "Say plainly on your site and listings when you’re open and what you take on short notice."],
   "Right now": ["hours", "Seasonal hours count: update them when they change.", "Publish your real hours everywhere AI looks, and keep them current."],
   "A specific job": ["towns", "A few photos and a line or two about each recent job are enough to start.", "Add a page about this work to your website, with real local jobs, so AI has something of yours to cite."],
   "A specific craving": ["towns", null, "Put your menu on a real web page and name your standout dishes."],
   "Price and trust": ["reviews", "Ask happy customers for Google reviews; AI goes by review count and rating.", "Make your reviews, years in business and credentials easy to find on your site and listings."],
   "Plans and logistics": ["other", null, "Answer parking, reservation and family questions on your site and listings."],
-  "Asked out loud": ["listings", null, "Complete your Apple Maps, Google and Yelp listings: voice assistants read from them."],
+  "Asked out loud": ["listings", null, "Check that your Apple Maps, Google and Yelp listings are complete: voice assistants read from them."],
   "Only in Maine": ["towns", null, "Add short pages that answer the Maine questions customers ask, like the seasonal work you do."],
   "Anywhere in Maine": ["press", null, "Build your reputation beyond your town: press, awards and reviews from customers around Maine."]
 };
@@ -1835,6 +1836,17 @@ const ENGINE_MOVE = {
   perplexity: "Perplexity quotes businesses’ own web pages. Add clear pages to your website for your services and towns."
 };
 
+// Tradespeople finish "jobs". A salon, an agent, an inn or a diner has customers, so the advice is worded for them.
+function workKind(au) {
+  let qs = []; try { qs = [...overall(au).questions.values()]; } catch { return "job"; }
+  if (qs.some((q) => q.group === "A specific craving") || /dent|doctor|physician|clinic|medical|chiro|veterin|\bvet\b|therap|salon|barber|\bspa\b|nail|massage|optom|eye care|day ?care|preschool|groom|boarding|kennel|\binn\b|hotel|motel|lodg|\bgym\b|fitness|yoga|studio|museum|theater|theatre/.test(String(DATA.client?.trade || "").toLowerCase())) return "visit";   // customers come in
+  return qs.some((q) => q.id === "emergency") ? "job" : "customer";
+}
+const WORK = {
+  tip: { job: "Real local jobs are what make these pages work: where, what you did and a photo or two.", visit: "Real local detail is what makes these pages work: who comes to you from there, what they come for and a photo or two.", customer: "Real local examples are what make these pages work: who you helped there, what you did and a photo or two." },
+  ask: { job: "Ask every customer for a Google review after the job. A short text with your review link works best.", visit: "Ask every customer for a Google review after their visit. A short text with your review link works best.", customer: "Ask every customer for a Google review once your work with them is done. A short text with your review link works best." },
+  send: { job: "Text this to each customer when the job is done, with your Google review link:", visit: "Text this to each customer after their visit, with your Google review link:", customer: "Text this to each customer when your work with them is done, with your Google review link:" }
+};
 function attentionItems(ctx) {
   const { au, you, comps } = ctx;
   const S = overall(au), yr = S.ents[you.id].rate, items = [];
@@ -1880,7 +1892,7 @@ function attentionItems(ctx) {
       const names = rows.map((x) => x.t), leaders = [...new Set(rows.map((x) => x.top.c.name))];
       items.push({ id: "towns", tier: "big", type: "towns", keys: ["towns"], title: `Customers in ${listJoin(names)} are hearing about ${leaders.length === 1 ? leaders[0] : "competitors"} instead of you`,
         what: rows.map((x) => `In ${x.t}, AI names you in ${tenPhrase(x.me)}; ${x.top.c.name} in ${tenPhrase(x.top.v)}.`).join(" "),
-        you: `Real local jobs are what make these pages work: where, what you did and a photo or two.`,
+        you: WORK.tip[workKind(au)],
         us: `Add a page to your website for ${names.length === 1 ? "this town" : "each of these towns"}, and make sure your listings name the towns you serve.`, proof: { kind: "town", town: rows[0].t } });
     }
   }
@@ -1904,7 +1916,7 @@ function attentionItems(ctx) {
     items.push({ id: "reviews", tier: mine.reviews < lead.p.reviews * 0.5 ? "big" : "next", type: "reviews", keys: ["reviews"], title: "Competitors have more Google reviews",
       what: `You have ${mine.reviews} Google reviews${mine.rating ? ` (${mine.rating}★)` : ""}; ${lead.c.name} has ${lead.p.reviews}${lead.p.rating ? ` (${lead.p.rating}★)` : ""}. Review count and rating are among the clearest signals AI goes by.`,
       you: (DATA.plan || []).some((p) => p.type === "reviews" && p.status !== "done") ? "There’s a ready-made message to send under “Your next steps”." : null,
-      us: "Ask every customer for a Google review after the job. A short text with your review link works best." });
+      us: WORK.ask[workKind(au)] });
   // AI warns customers about complaints or mixed reviews
   if (au.answers) {
     const d = describe(you, au.answers, true), warn = d.quotes.filter((q) => q.caution);
@@ -1956,6 +1968,11 @@ function workingItems(ctx) {
   }
   if (acc?.brandedNamed?.n && acc.brandedNamed.rate >= 0.9) out.push({ title: "AI knows exactly who you are", what: `Asked about you by name, it recognized you in ${acc.brandedNamed.k} of ${acc.brandedNamed.n} answers.` });
   if (acc && acc.factsPhone && !acc.phoneIssues?.length) out.push({ title: "AI gives out the right phone number", what: "No answer we checked gave customers a wrong number." });
+  // Listings: what we could read for ourselves, and what the owner has told us is done.
+  const gl = au.site?.places?.client, glHas = gl && gl.found !== false ? [gl.phone && "your phone number", gl.website && "your website", (gl.hours || []).length && "your hours", gl.reviews != null && `${gl.reviews} reviews`].filter(Boolean) : [];
+  if (glHas.length >= 3) out.push({ title: "Your Google listing is live and filled in", what: `It shows ${listJoin(glHas)}.` });
+  const CL = { google: "Google", bing: "Bing", apple: "Apple Maps", yelp: "Yelp" }, cl = (DATA.client?.claimed || []).filter((k) => CL[k]);
+  if (cl.length === 4) out.push({ title: "Your core listings are claimed", what: "You told us your Google, Bing, Apple Maps and Yelp listings are claimed and filled in, so they’re not in your plan." });
   if (au.answers) {
     const d = describe(you, au.answers, true), top = Object.entries(d.counts).sort((a, b) => b[1] - a[1])[0];
     const label = Object.fromEntries(REASONS.map(([k, l]) => [k, l]));
