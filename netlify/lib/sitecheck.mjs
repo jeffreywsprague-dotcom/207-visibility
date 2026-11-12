@@ -3,6 +3,7 @@
 // Before saying a phone number, hours or a town is missing, it also reads a few inner pages
 // (contact, hours, service area, about, and pages named for a target town).
 
+import { hoursMatter } from "./questions.mjs";
 export const BOTS = [
   { token: "OAI-SearchBot", role: "search", who: "ChatGPT search", ua: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.3; +https://openai.com/searchbot" },
   { token: "ChatGPT-User", role: "user", who: "ChatGPT when a user asks about a page", ua: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot" },
@@ -191,7 +192,7 @@ export async function checkSite(website, client, facts = {}) {
   const ldAll = pages.map((pg) => jsonLdTypes(pg.html));
   const schemaHours = (blocks) => { let hit = false; const walk = (n) => { if (!n || typeof n !== "object" || hit) return; if (Array.isArray(n)) return n.forEach(walk); if (n.openingHours || n.openingHoursSpecification) { hit = true; return; } Object.values(n).forEach(walk); }; walk(blocks); return hit; };
   const hoursPg = firstWith((pg) => hoursIn(pg.text)), hoursLd = ldAll.some((x) => schemaHours(x.blocks));
-  add(hoursPg || hoursLd ? "pass" : "warn", hoursPg || hoursLd ? "Hours are in plain text" : "Hours not found in plain text",
+  if (hoursPg || hoursLd || hoursMatter(client || {})) add(hoursPg || hoursLd ? "pass" : "warn", hoursPg || hoursLd ? "Hours are in plain text" : "Hours not found in plain text",
     hoursPg ? elsewhere(hoursPg) : hoursLd ? "Found in your schema markup. Adding them as readable text helps too." : "Publishing hours helps “who’s open now” answers." + readNote);
 
   const ld = { types: [...new Set(ldAll.flatMap((x) => x.types))], blocks: ldAll.flatMap((x) => x.blocks) };

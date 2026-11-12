@@ -339,9 +339,9 @@ const STEP_PATTERNS = [
   [/^get a website/, "website"], [/^let every ai assistant/, "crawler"],
   [/^fix the wrong phone|^make sure ai knows exactly/, "accuracy"],
   [/^claim and complete your google|^confirm your .+ listings? (is|are) claimed|^make sure your .+ listings? (is|are) complete|^claim your google listing|^get into chatgpt|^strengthen your google maps profile|^win google.s ai mode|^make sure claude finds/, "core-listings"],
-  [/^get listed and accurate on|^get listed on .+, and check your|^check your .+ pages?$/, "cited-sites"], [/^add pages for/, "towns"], [/^give perplexity pages/, "pages-perplexity"],
+  [/^get listed and accurate on|^get listed on .+, and check your|^check your .+ pages?$/, "cited-sites"], [/^add pages for|^show ai you work in/, "towns"], [/^give perplexity pages/, "pages-perplexity"],
   [/^make your emergency|^make your hours and emergency/, "group:Need it now"], [/^make sure ai knows when you.re open/, "group:Right now"],
-  [/^add a page for each (job|thing)/, "group:A specific job"], [/^say plainly how soon/, "group:Need it now"], [/^name the dishes/, "group:A specific craving"],
+  [/^add a page for each (job|thing)|^put the jobs customers ask about|^answer the questions customers ask/, "group:A specific job"], [/^say plainly how soon/, "group:Need it now"], [/^name the dishes/, "group:A specific craving"],
   [/^publish price ranges/, "group:Price and trust"], [/^answer the planning questions/, "group:Plans and logistics"],
   [/^get listed on efficiency maine|^answer the maine questions/, "group:Only in Maine"], [/^build your statewide reputation/, "group:Anywhere in Maine"],
   [/^build the reputation behind/, "group:Price and trust"],
@@ -388,19 +388,26 @@ function ownerPlan(audit, s, site, opts) {
   const foodTrade = s.questions.some((q) => q.group === "A specific craving");
   const visitTrade = foodTrade || /dent|doctor|physician|clinic|medical|chiro|veterin|\bvet\b|therap|salon|barber|\bspa\b|nail|massage|optom|eye care|day ?care|preschool|groom|boarding|kennel|\binn\b|hotel|motel|lodg|\bgym\b|fitness|yoga|studio|museum|theater|theatre/.test(tradeWord);           // customers come in: a diner, a dentist, a salon, an inn
   const jobTrade = !visitTrade && s.questions.some((q) => q.id === "emergency");   // tradespeople, who finish jobs
+  // Hours matter where customers ask AI who's open or who can take them now. An agent, a lawyer or an advisor
+  // works by appointment, so their plan never brings hours up.
+  const hoursMatter = s.questions.some((q) => q.group === "Need it now" || q.group === "Right now");
+  const dropHours = (t) => String(t).replace(/name, address, phone and hours/g, "name, address and phone").replace(/your service area, hours and photos/g, "your service area and photos")
+    .replace(/Add services, hours and photos/g, "Add services and photos").replace(/, with photos and hours/g, ", with photos").replace(/categories, services, hours, photos and reviews/g, "categories, services, photos and reviews");
   const HOW = {
-    website: ["Pick a website builder (Squarespace, Wix or WordPress) or a local web designer.", "Make a page for each service and each town you want work from, in plain words.", "Put your business name, phone, service area and hours on every page as text, not inside an image.", "When it’s live, add the address under “Your business details” below your plan, then press “Check website and Google”."],
+    website: ["Start here: one page is enough to begin. Squarespace, Wix and Google Sites can each have one live in an afternoon.", "Put your business name, phone, the towns you serve and what you do on it as text, not inside an image.", "Next: add a short section for each service and each town you want work from, in plain words.", "Go further: hire a local web designer when you’re ready for more.", "When it’s live, add the address under “Your business details” below your plan, then press “Check website and Google”."],
     crawler: ["Forward this to whoever built or hosts your website: “Please make sure our robots.txt file and our firewall or CDN allow these crawlers: OAI-SearchBot, ChatGPT-User, PerplexityBot, Perplexity-User, Claude-SearchBot, Claude-User, Googlebot, bingbot and Applebot.”", "If most of your homepage text only shows after scripts run, ask them to make the main text load as plain HTML too.", CHECK],
     phone: ["Search each wrong number on Google with quotes around it, and write down every site that shows it. If you recognize a number (an old line, an answering service), start where it was used.", "Fix it on Google Business Profile, Bing Places, Apple Business Connect and Yelp first.", "Then fix each directory from your search. Most have an “edit” or “claim this business” link.", "Make sure your own website shows the right number as text.", "Tick this step, then use Quick look to see what AI says now. Listings can take a few weeks to catch up."],
     match: ["Decide the exact name, address and phone you’ll use everywhere, down to “Co.” or “Company”.", "Update Google Business Profile, Bing Places, Apple Business Connect and Yelp to match it exactly.", "Update your website and Facebook page to match.", "Tick this step, then use Quick look to see whether AI recognizes you by name."],
     core: ["Already claimed and filled in one of these? Tick it off in the checklist below and move to the next.", "Google: go to business.google.com, find your business, and claim or verify it. Fill in every service, your service area, hours and photos.", "Bing: go to bingplaces.com and add your business. It can import your Google profile in one step.", "Apple: go to businessconnect.apple.com and claim your place, so Siri and Apple Maps show it.", "Yelp: go to biz.yelp.com and claim your page. Add services, hours and photos.", "Each one asks you to prove the business is yours, by text, call, video or postcard.", "Use exactly the same name, address and phone on all four."],
     citedHave: ["Open your page on each site and compare it with your Google profile: name, address, phone and hours.", "Claim the page if you haven’t (look for “claim this business”), then correct anything that differs.", "Add your services, the towns you serve and a few recent photos.", "Tick each site off in the checklist below as you finish it."],
     cited: ["On each site, search for your business first: there may already be a page you can claim.", "Claim it or create a profile. Most let you list for free; you don’t need a paid plan to be listed.", "Use the same name, address, phone and hours as your Google profile.", "Add your services and the towns you serve.", "Tick each site off in the checklist below as you finish it."],
-    towns: (towns) => [`Add one page per town to your website, titled like “${tradeCap} in ${towns[0] || "your town"}, Maine”.`, jobTrade ? "On each page, describe two or three real jobs you did there, with photos." : "On each page, describe two or three customers you helped there, with photos if you have them.", "Link to each town page from your home page, using the town’s name in the link.", "Add the same towns to your service area in Google Business Profile.", CHECK],
-    needs: ["Make a page for each of these, titled the way customers ask for it.", "Answer the question in the first two sentences, in plain words.", "Add what people want to know before they call: what it costs, how it works and how to get started.", "Link to each page from your home page or menu."],
+    towns: (towns, agentSites) => [`Start here (15 minutes): add a “Towns we serve” line to your home page and footer that names ${list(towns)}.`, "Add the same towns to the service area on your Google Business Profile.",
+      agentSites ? "On Zillow and the other agent sites, add these towns to your service areas and make sure your sales there show on your profile." : null,
+      `Next (about 60 minutes): add an “Areas we serve” page with a short paragraph for each town that mentions ${jobTrade ? "a real job or two you did there" : agentSites ? "a recent sale or two there" : "a customer or two you helped there"}.`,
+      `Go further: where a competitor is far ahead, give that town a page of its own, titled like “${tradeCap} in ${towns[0] || "your town"}, Maine”.`, CHECK].filter(Boolean),
+    needs: ["Start here (30 minutes): add a short questions-and-answers section to your home page or services page, with each of these questions as a heading.", "Answer each one in the first two sentences, in plain words.", "Next: add what people want to know before they call: what it costs, how it works and how to get started.", "Go further: give the questions you most want to win a page of their own, linked from your home page or menu."],
     soon: ["Say it in plain words on your home page: whether you take walk-ins, same-day or last-minute bookings, or new customers right now.", "Add the same line to your Google Business Profile description.", "Keep your hours current on Google, Bing, Apple Maps and Yelp.", "When it’s done, press “Check website and Google” at the top of your plan."],
-    jobs: ["Make a page for each job, named the way customers ask for it.", "Show real local projects with a photo and a line or two about each.", "Answer what customers ask: roughly what it costs, how long it takes, and when you can start.", "Link to each page from your home page or menu."],
-    hoursSoft: ["Put your hours on your home page or contact page as text, not inside an image. If you work by appointment, say “by appointment” and how to book.", "Set the same hours on Google, Bing, Apple and Yelp.", CHECK],
+    jobs: ["Start here (30 minutes): list the jobs customers ask about on your home page or services page, named the way they ask for them.", "Add a line or two under each: what it involves, roughly what it costs and how soon you can start.", "Next: add a real local project to each, with a photo.", "Go further: give the jobs you most want more of a page of their own, linked from your home page or menu."],
     hours: ["Put your hours on your home page or contact page as text, not inside an image.", "Set the same hours on Google, Bing, Apple and Yelp, and add holiday and seasonal hours.", "If you take emergency or same-day calls, say so in those words on your site and in your Google profile description.", CHECK],
     price: ["Add a short page with typical price ranges for your most common jobs.", "List what makes a job cost more or less.", "Say how to get an exact quote from you."],
     menu: ["Put your menu on your website as text, not only as a PDF or photo.", "Name your standout dishes and describe them in a sentence.", "Add the menu link to your Google Business Profile."],
@@ -408,9 +415,9 @@ function ownerPlan(audit, s, site, opts) {
     emaine: ["Go to efficiencymaine.com and look for how contractors become registered vendors for the work you do.", "If you qualify, register and get listed.", "Check that the name, phone and service area on that listing match your other listings."],
     tune: ["Send the list of fixes above to whoever manages your website.", "For schema, ask for “LocalBusiness” schema markup with your name, address, phone and hours.", CHECK],
     reviews: ["Get your review link: in your Google Business Profile, choose “Ask for reviews” and copy the link.", jobTrade ? "The day you finish a job, text the customer a thank-you with the link. A ready-made message is under “Your next steps” on your Overview." : visitTrade ? "After a customer’s visit, send them a thank-you with the link. A ready-made message is under “Your next steps” on your Overview." : "When your work with a customer is done, send them a thank-you with the link. A ready-made message is under “Your next steps” on your Overview.", "Ask every customer, not only the happy ones, and don’t offer anything in return. Google’s rules require both.", "Reply to every review, good or bad, in a sentence or two."],
-    press: ["Pick two or three projects with a story: unusual, for a local landmark, or for a good cause.", "Email a short note with a photo to your local paper or community news site.", "Look up your area’s “best of” awards and your chamber of commerce, and enter or join.", "Add awards and memberships to your website and your Google profile."],
-    state: ["Ask customers from other parts of Maine to mention their town in their review.", "Pitch a statewide outlet with a project worth covering.", "List the regions you serve on your website and your Google profile."],
-    perplexity: ["Make a clear page for each service and each town you serve.", "Use plain headings that match how customers ask, and put the answer in the first lines.", CHECK]
+    press: ["Start here: add the awards, memberships and years in business you already have to your website and your Google profile.", "Next: look up your area’s “best of” awards and your chamber of commerce, and enter or join.", `Go further: pick ${jobTrade ? "a project" : "something you did"} with a story (unusual, for a local landmark or for a good cause) and email a short note with a photo to your local paper or community news site.`],
+    state: ["Start here: list the regions you serve on your website and your Google profile.", "Next: ask customers from other parts of Maine to mention their town in their review.", `Go further: pitch a statewide outlet with ${jobTrade ? "a project" : "a story"} worth covering.`],
+    perplexity: ["Start here: make sure each service and each town you serve is named in plain text on your website.", "Use plain headings that match how customers ask, and put the answer in the first lines.", "Go further: give your main services and towns a page each.", CHECK]
   };
   const qFor = (group) => { const qs = s.questions.filter((q) => q.group === group), w = qs.map((q) => ({ q, r: you.byQuestion?.[q.id] })).filter((x) => x.r?.n).sort((a, b) => a.r.rate - b.r.rate)[0]; return (w ? w.q : qs[0] || {}).text; };
   const fmtPhone = (d) => String(d || "").replace(/^(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
@@ -471,8 +478,8 @@ function ownerPlan(audit, s, site, opts) {
   const noGoogle = !g && typeof CONFIG !== "undefined" && !!CONFIG.maps && !!site?.places && !claimed.has("google");
   if (todo.length) {
     const names = todo.map((x) => x[2]), nl = `${list(names)} ${names.length === 1 ? "listing" : "listings"}`, isAre = names.length === 1 ? "is" : "are", it = names.length === 1 ? "it" : "them";
-    const gHas = g ? [g.phone && "a phone number", g.website && "your website", (g.hours || []).length && "hours", g.reviews != null && `${g.reviews} reviews`].filter(Boolean) : [];
-    const gMiss = g ? [!g.phone && "phone number", !g.website && (c.website || site?.domain) && "website link", !(g.hours || []).length && (jobTrade || visitTrade) && "hours"].filter(Boolean) : [];
+    const gHas = g ? [g.phone && "a phone number", g.website && "your website", hoursMatter && (g.hours || []).length && "hours", g.reviews != null && `${g.reviews} reviews`].filter(Boolean) : [];
+    const gMiss = g && "phone" in g ? [!g.phone && "phone number", !g.website && (c.website || site?.domain) && "website link", !(g.hours || []).length && hoursMatter && "hours"].filter(Boolean) : [];
     const seen = [g ? `Your Google listing is live${gHas.length ? `, with ${list(gHas)}` : ""}${gMiss.length ? `, but we didn’t see ${list(gMiss.map((x) => (x === "hours" ? x : "a " + x))).replace(/ and (?!.* and )/, " or ")} on it` : ""}.` : "",
       yelpSeen && !claimed.has("yelp") ? "AI already finds you on Yelp." : "",
       done.length ? `You told us your ${list(done.map((x) => x[2]))} ${done.length === 1 ? "listing is" : "listings are"} claimed and filled in.` : ""].filter(Boolean).join(" ");
@@ -516,10 +523,10 @@ function ownerPlan(audit, s, site, opts) {
   const weakTowns = (s.locations || []).slice(1).filter((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n && (r.rate < 0.15 || (lb && ahead(lb.r, r))); });
   const townList = [...new Set([...weakTowns, ...missing])].slice(0, 3);
   const townGap = Math.max(0, ...townList.map((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n ? (lb ? lb.r.rate : 0.3) - r.rate : 0.1; }));
-  const townStep = !townList.length ? null : add({ gap: townGap, keys: ["towns"], how: HOW.towns(townList), title: `Add pages for ${list(townList)}`, when: "This month", type: "towns",
+  const townStep = !townList.length ? null : add({ gap: townGap, keys: ["towns"], how: HOW.towns(townList, !!salesTxt), title: `Show AI you work in ${list(townList)}`, when: "This week", type: "towns",
     detail: townList.map((t) => { const r = you.byLocation?.[t], lb = leaderBy("byLocation", t); return r?.n ? `In ${t}, AI named you in ${ofN(r)} answers${lb && lb.r.rate > r.rate ? ` and ${lb.e.name} in ${lb.r.k}` : ""}.` : ""; }).filter(Boolean).join(" ") +
       (townList.some((t) => missing.includes(t)) ? ` We didn’t find ${list(townList.filter((t) => missing.includes(t))).replace(/ and (?!.* and )/, " or ")} on ${readWhere}.` : "") +
-      " AI quotes pages that name the town and the work, so a page per town gives it something of yours to cite." });
+      " AI can only name you for a town it can see you work in, so start by listing these on your website." });
 
   // 7. The kinds of questions where they're weakest
   const food = (s.questions || []).some((q) => q.id === "crave1");
@@ -527,12 +534,12 @@ function ownerPlan(audit, s, site, opts) {
   const G = {
     "Need it now": ["Make your emergency and same-day service plain", "hours", "AI only recommends you for urgent jobs if your website and listings say you take them, in those words."],
     "Right now": ["Make sure AI knows when you’re open", "hours", "“Open now” answers come from the hours AI can read on your website and listings."],
-    "A specific job": ["Add a page for each job you want more of", "towns", "AI quotes pages that name the job, so a page per service gives it something of yours to cite."],
+    "A specific job": ["Put the jobs customers ask about on your website", "towns", "AI quotes websites that name the job, so even a few lines about each give it something of yours to cite."],
     "A specific craving": ["Name the dishes people ask about", "towns", "AI repeats what menus and reviews say in plain words, and it can’t read a menu that’s only a PDF or a photo."],
     "Price and trust": ["Publish price ranges and what affects the cost", "other", "AI tends to recommend businesses that answer the price question on their own website."],
     "Plans and logistics": ["Answer the planning questions: parking, kids, reservations", "other", "Diners ask AI about parking, kids and reservations, and it answers from what your website and listings say."],
     "Only in Maine": em ? ["Get listed on Efficiency Maine’s vendor locator", "listings", "Efficiency Maine’s list of registered vendors is the state’s own directory for rebate-eligible work, and AI cites it for these questions."]
-      : ["Answer the Maine questions on your site", "towns", "Maine-specific questions go to businesses whose pages answer them."],
+      : ["Answer the Maine questions on your site", "towns", "Maine-specific questions go to businesses whose websites answer them."],
     "Anywhere in Maine": ["Build your statewide reputation", "press", "Statewide questions go to the businesses with the most reviews, press and listings across Maine."]
   };
   const gaps = Object.entries(you.byGroup || {}).filter(([g, r]) => G[g] && r?.n).map(([g, r]) => { const lb = leaderBy("byGroup", g); return { g, r, lb, gap: (lb ? lb.r.rate : 0.3) - r.rate }; })
@@ -540,14 +547,14 @@ function ownerPlan(audit, s, site, opts) {
   // Up to three steps from the weakest kinds of questions; ones folded into another step don't count.
   let hoursStep = null, pagesStep = null, trust = null, own = 0;
   const used = [];
-  const PAGES = { "A specific job": "AI quotes pages that name the job, so a page per service gives it something of yours to cite.",
-    "Only in Maine": "Seasonal and Maine-specific questions go to businesses whose pages answer them." };
+  const PAGES = { "A specific job": "AI quotes websites that name the job, so even a few lines about each give it something of yours to cite.",
+    "Only in Maine": "Seasonal and Maine-specific questions go to businesses whose websites answer them." };
   // A business nobody calls in an emergency (a salon, an agent, a bank, an inn) is asked different questions in
   // these two groups, so the steps are worded for those.
   const urgentTrade = s.questions.some((q) => q.id === "emergency");
   if (!urgentTrade) {
     G["Need it now"] = ["Say plainly how soon you can take someone", "hours", "AI only says a business takes walk-ins, has openings or responds quickly when its website and listings say so in plain words."];
-    G["A specific job"] = ["Add a page for each thing customers ask you for", "towns", "AI quotes pages that answer exactly what was asked, so a page for each gives it something of yours to cite."];
+    G["A specific job"] = ["Answer the questions customers ask, on your website", "towns", "AI quotes websites that answer exactly what was asked, so even a short answer gives it something of yours to cite."];
     PAGES["A specific job"] = G["A specific job"][2];
   }
   // Merges into a step already in the plan are always made; a new step only while there are fewer than three.
@@ -578,7 +585,7 @@ function ownerPlan(audit, s, site, opts) {
       }
       if (own >= 3) continue;
       used.push(x);
-      pagesStep = add({ gap: x.gap, keys: ["group:" + x.g], how: urgentTrade ? HOW.jobs : HOW.needs, title: urgentTrade ? "Add a page for each job customers ask about" : "Add a page for each thing customers ask you for", type: "towns", when: "This month", detail: `${found} ${PAGES[x.g]}` });
+      pagesStep = add({ gap: x.gap, keys: ["group:" + x.g], how: urgentTrade ? HOW.jobs : HOW.needs, title: urgentTrade ? "Put the jobs customers ask about on your website" : "Answer the questions customers ask, on your website", type: "towns", when: "This week", detail: `${found} ${PAGES[x.g]}` });
       own++; continue;
     }
     // Emergency service and opening hours are one fix: say it plainly, everywhere.
@@ -599,15 +606,14 @@ function ownerPlan(audit, s, site, opts) {
   // Perplexity, if it's the weakest platform, is moved by pages of their own.
   if (W?.home === "pages") {
     const pages = steps.find((x) => x.type === "towns");
-    if (pages) pages.detail += ` Your own pages matter most on ${ENG_SHORT[weak]}, your weakest platform (${ofN(wr)} answers).`;
+    if (pages) pages.detail += ` Your own website matters most on ${ENG_SHORT[weak]}, your weakest platform (${ofN(wr)} answers).`;
     else add({ gap: 0.2, keys: ["pages-perplexity"], how: HOW.perplexity, title: "Give Perplexity pages of yours to quote", type: "towns", when: "This month",
-      detail: `${weakTxt} Perplexity quotes businesses’ own web pages more than any other assistant, so a clear page for each service and town gives it something of yours.` });
+      detail: `${weakTxt} Perplexity quotes businesses’ own websites more than any other assistant, so naming each service and town clearly on yours gives it something to quote.` });
   }
 
   // 8. Website housekeeping
-  if (f("Hours not found") && !used.some((x) => G[x.g][1] === "hours")) add({ w: 6, keys: ["hours"], how: jobTrade || visitTrade ? HOW.hours : HOW.hoursSoft, title: "Publish your hours everywhere", when: "Any time", type: "hours",
-    detail: jobTrade || visitTrade ? `AI answers “who’s open now?” from the hours it can read, and we didn’t find yours on ${readWhere}.`
-      : `AI tells customers when they can reach you from the hours it can read, and we didn’t find yours on ${readWhere}. If you work by appointment, say so in those words.` });
+  if (hoursMatter && f("Hours not found") && !used.some((x) => G[x.g][1] === "hours")) add({ w: 6, keys: ["hours"], how: HOW.hours, title: "Publish your hours everywhere", when: "Any time", type: "hours",
+    detail: `AI answers “who’s open now?” from the hours it can read, and we didn’t find yours on ${readWhere}.` });
   const tune = [f("No business schema") && "add business details in the format AI reads (schema markup)", f("Some schema markup is broken") && "repair broken schema markup",
     f("Phone number not found") && "put your phone number in plain text", f("Missing page title") && "add a page title", f("Missing meta description") && "add a page description for search results",
     f("No sitemap") && "add a sitemap so new pages get found"].filter(Boolean);
@@ -642,6 +648,7 @@ function ownerPlan(audit, s, site, opts) {
   if (opts.monthly) add({ w: -1, keys: ["monthly"], title: "Re-measure every month", when: "Monthly", type: "other",
     how: ["Nothing to do: it runs on its own.", "When the email arrives, open your dashboard and look at what changed."],
     detail: `On the 1st we ask the same ${s.questions.length} questions again, from the same towns, and show you what changed. Each finished step is marked on your chart.` });
+  if (!hoursMatter) for (const st of steps) { st.detail = dropHours(st.detail); st.how = (st.how || []).map(dropHours); st.extra = (st.extra || []).map((x) => ({ ...x, bench: dropHours(x.bench) })); }
   return steps.map((st, i) => ({ st, i })).sort((a, b) => b.st.w - a.st.w || a.i - b.i).map((x) => x.st);
 }
 // Where a plan step belongs, going by the order a fresh plan from this audit puts it in. Steps written by hand

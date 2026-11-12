@@ -293,6 +293,13 @@ export function discoveryQuestions(client, town) {
 }
 
 // Questions that use the business name; used for accuracy, not for the mention rate.
+// Do opening hours matter for this business? They do where customers ask AI who's open or who can take them now
+// (trades, restaurants, shops, salons). An agent, a lawyer or an advisor works by appointment, so nothing in the
+// website check or the plan should press them about hours.
+export function hoursMatter(client) {
+  try { return discoveryQuestions(client, client.town || "").some((q) => q.group === "Need it now" || q.group === "Right now"); } catch { return true; }
+}
+
 export function brandedQuestions(client) {
   const b = clean(client.business), t = noun(client.trade);
   const town = clean(client.town), st = clean(client.state) || "ME";

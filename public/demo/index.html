@@ -1823,12 +1823,12 @@ const QMOVES = {
   "Looking for the best": ["listings", null, "Make sure every detail is filled in on the sites AI checks when customers ask for the best: the ones it cited most for you, then Google, Bing, Apple Maps and Yelp."],
   "Need it now": ["hours", "If you take emergency or same-day jobs, say so in those words.", "Say plainly on your site and listings when you’re open and what you take on short notice."],
   "Right now": ["hours", "Seasonal hours count: update them when they change.", "Publish your real hours everywhere AI looks, and keep them current."],
-  "A specific job": ["towns", "A few photos and a line or two about each recent job are enough to start.", "Add a page about this work to your website, with real local jobs, so AI has something of yours to cite."],
+  "A specific job": ["towns", "A few photos and a line or two about each recent job are enough to start.", "Describe this work on your website, with real local jobs, so AI has something of yours to cite."],
   "A specific craving": ["towns", null, "Put your menu on a real web page and name your standout dishes."],
   "Price and trust": ["reviews", "Ask happy customers for Google reviews; AI goes by review count and rating.", "Make your reviews, years in business and credentials easy to find on your site and listings."],
   "Plans and logistics": ["other", null, "Answer parking, reservation and family questions on your site and listings."],
   "Asked out loud": ["listings", null, "Check that your Apple Maps, Google and Yelp listings are complete: voice assistants read from them."],
-  "Only in Maine": ["towns", null, "Add short pages that answer the Maine questions customers ask, like the seasonal work you do."],
+  "Only in Maine": ["towns", null, "Answer the Maine questions customers ask on your website, like the seasonal work you do. A short section each is enough to start."],
   "Anywhere in Maine": ["press", null, "Build your reputation beyond your town: press, awards and reviews from customers around Maine."]
 };
 const ENGINE_MOVE = {
@@ -1836,7 +1836,7 @@ const ENGINE_MOVE = {
   gemini: "Gemini reads Google Maps. Fill in every service, category, photo and hour on your Google Business Profile.",
   aimode: "Google’s AI Mode leans on your Google profile and Google reviews. Complete your profile; more Google reviews help most.",
   anthropic: "Claude reads the directories it finds and skips businesses whose details don’t match. Make your name, address and phone match everywhere.",
-  perplexity: "Perplexity quotes businesses’ own web pages. Add clear pages to your website for your services and towns."
+  perplexity: "Perplexity quotes businesses’ own websites. Name your services and towns clearly on yours."
 };
 
 // Tradespeople finish "jobs". A salon, an agent, an inn or a diner has customers, so the advice is worded for them.
@@ -1846,7 +1846,7 @@ function workKind(au) {
   return qs.some((q) => q.id === "emergency") ? "job" : "customer";
 }
 const WORK = {
-  tip: { job: "Real local jobs are what make these pages work: where, what you did and a photo or two.", visit: "Real local detail is what makes these pages work: who comes to you from there, what they come for and a photo or two.", customer: "Real local examples are what make these pages work: who you helped there, what you did and a photo or two." },
+  tip: { job: "Real local jobs make this work: where, what you did and a photo or two.", visit: "Real local detail makes this work: who comes to you from there and what they come for.", customer: "Real local examples make this work: who you helped there and what you did." },
   ask: { job: "Ask every customer for a Google review after the job. A short text with your review link works best.", visit: "Ask every customer for a Google review after their visit. A short text with your review link works best.", customer: "Ask every customer for a Google review once your work with them is done. A short text with your review link works best." },
   send: { job: "Text this to each customer when the job is done, with your Google review link:", visit: "Text this to each customer after their visit, with your Google review link:", customer: "Text this to each customer when your work with them is done, with your Google review link:" }
 };
@@ -1896,7 +1896,7 @@ function attentionItems(ctx) {
       items.push({ id: "towns", tier: "big", type: "towns", keys: ["towns"], title: `Customers in ${listJoin(names)} are hearing about ${leaders.length === 1 ? leaders[0] : "competitors"} instead of you`,
         what: rows.map((x) => `In ${x.t}, AI names you in ${tenPhrase(x.me)}; ${x.top.c.name} in ${tenPhrase(x.top.v)}.`).join(" "),
         you: WORK.tip[workKind(au)],
-        us: `Add a page to your website for ${names.length === 1 ? "this town" : "each of these towns"}, and make sure your listings name the towns you serve.`, proof: { kind: "town", town: rows[0].t } });
+        us: `Name ${names.length === 1 ? "this town" : "these towns"} on your website and your listings. A short paragraph about your work in each gives AI something to quote.`, proof: { kind: "town", town: rows[0].t } });
     }
   }
   // Customer questions a competitor clearly wins (the two widest gaps)
@@ -1908,7 +1908,7 @@ function attentionItems(ctx) {
     // A business nobody calls in an emergency (a salon, an agent, an inn) is asked about walk-ins, openings and specific needs instead.
     const soft = ![...S.questions.values()].some((q) => q.id === "emergency");
     const SOFT = { "Need it now": ["hours", "If you take walk-ins, last-minute bookings or new customers, say so in those words.", "Say plainly on your site and listings how soon you can take someone."],
-      "A specific job": ["towns", "Answer it in the first two sentences, in plain words.", "Add a page to your website that answers this, so AI has something of yours to cite."] };
+      "A specific job": ["towns", "Answer it in the first two sentences, in plain words.", "Answer this on your website, so AI has something of yours to cite. A short section is enough to start."] };
     const [type, youDo, usDo] = (soft && SOFT[x.q.group]) || QMOVES[x.q.group] || ["other", null, "Open the answers to see which sites AI relies on for this question, and get onto them."];
     items.push({ id: "q-" + x.q.id, tier: "next", type, keys: ["group:" + x.q.group], title: `When customers ask “${x.q.text}”, AI picks ${x.best.c.name}`,
       what: `${x.best.c.name} is named in ${tenPhrase(x.best.v)}; you in ${tenPhrase(x.yv)}.`, you: youDo, us: usDo, proof: { kind: "question", qid: x.q.id } });
@@ -1972,7 +1972,7 @@ function workingItems(ctx) {
   if (acc?.brandedNamed?.n && acc.brandedNamed.rate >= 0.9) out.push({ title: "AI knows exactly who you are", what: `Asked about you by name, it recognized you in ${acc.brandedNamed.k} of ${acc.brandedNamed.n} answers.` });
   if (acc && acc.factsPhone && !acc.phoneIssues?.length) out.push({ title: "AI gives out the right phone number", what: "No answer we checked gave customers a wrong number." });
   // Listings: what we could read for ourselves, and what the owner has told us is done.
-  const gl = au.site?.places?.client, glHas = gl && gl.found !== false ? [gl.phone && "your phone number", gl.website && "your website", (gl.hours || []).length && "your hours", gl.reviews != null && `${gl.reviews} reviews`].filter(Boolean) : [];
+  const gl = au.site?.places?.client, glHas = gl && gl.found !== false ? [gl.phone && "your phone number", gl.website && "your website", [...S.questions.values()].some((q) => q.group === "Need it now" || q.group === "Right now") && (gl.hours || []).length && "your hours", gl.reviews != null && `${gl.reviews} reviews`].filter(Boolean) : [];
   if (glHas.length >= 3) out.push({ title: "Your Google listing is live and filled in", what: `It shows ${listJoin(glHas)}.` });
   const CL = { google: "Google", bing: "Bing", apple: "Apple Maps", yelp: "Yelp" }, cl = (DATA.client?.claimed || []).filter((k) => CL[k]);
   if (cl.length === 4) out.push({ title: "Your core listings are claimed", what: "You told us your Google, Bing, Apple Maps and Yelp listings are claimed and filled in, so they’re not in your plan." });

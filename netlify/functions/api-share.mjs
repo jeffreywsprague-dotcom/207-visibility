@@ -173,7 +173,7 @@ export default async (req) => {
     const a = audits[i];
     const answers = await answersFor(a);
     const site = (await getJSON("answers", `${a.key}/site`))?.site || {};
-    const places = Object.fromEntries(Object.entries(site.places || {}).map(([id, p]) => [id, p && p.found ? { rating: p.rating, reviews: p.reviews } : null]));
+    const places = Object.fromEntries(Object.entries(site.places || {}).map(([id, p]) => [id, p && p.found ? { rating: p.rating, reviews: p.reviews, phone: !!p.phone, website: !!p.website, hours: (p.hours || []).length ? ["listed"] : [] } : null]));
     out.push({
       key: a.key, createdAt: a.createdAt, kind: a.kind || "audit",
       plan: { engines: a.plan.engines, runs: a.plan.runs, locations: a.plan.locations.map((l) => ({ town: l.town })) },
