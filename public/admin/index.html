@@ -355,6 +355,17 @@ function stepKey(p) {
 }
 const stepKeys = (p) => (p.keys && p.keys.length ? p.keys : [stepKey(p)]);
 
+// A cited site that is another business's own website (triplepfence.com for "Triple P Fence"). Nobody can get
+// listed on a competitor's site, so these are shown for what they are and never offered as a place to be listed.
+const squashName = (s) => String(s || "").toLowerCase().replace(/&/g, "and").replace(/\b(the|co|company|llc|inc|ltd)\b/g, "").replace(/[^a-z0-9]/g, "");
+function siteOwner(domain, names) {
+  if (SITE_NAMES[domain] || domain === "google maps") return null;      // a known directory or review site
+  const core = String(domain).replace(/\.(com|net|org|biz|us|co|info|me)$/, "").replace(/[^a-z0-9]/g, "");
+  if (core.length < 6) return null;
+  return (names || []).find((n) => { const q = squashName(n); return q.length >= 6 && (core === q || core.includes(q) || (core.length >= 8 && q.includes(core))); }) || null;
+}
+// Cited often, but not somewhere a business can be listed.
+const NOT_LISTABLE = /^(lowes|homedepot|amazon|walmart|menards|tractorsupply|wikipedia|reddit|quora|youtube)\./;
 function ownerPlan(audit, s, site, opts) {
   opts = opts || {};
   const steps = [];
@@ -501,7 +512,8 @@ function ownerPlan(audit, s, site, opts) {
 
   // 4. The sites AI cites most for this kind of business
   const covered = /google|bing|apple|yelp/;
-  const top = s.sources.filter((x) => x.domain !== site?.domain && x.domain !== "google maps" && !covered.test(x.domain)).slice(0, 3);
+  const bizNames = [...comps.map((e) => e.name), ...(s.others || []).map((o) => o.name)];
+  const top = s.sources.filter((x) => x.domain !== site?.domain && x.domain !== "google maps" && !covered.test(x.domain) && !NOT_LISTABLE.test(x.domain) && !siteOwner(x.domain, bizNames)).slice(0, 3);
   // Which of those AI already finds them on (a page of theirs cited, or the site named in an answer about them),
   // so the step says "check your page" there instead of "get listed".
   const have = top.filter((x) => x.own > 0), need = top.filter((x) => !(x.own > 0));

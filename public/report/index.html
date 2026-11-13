@@ -1119,6 +1119,15 @@ function renderAnswerText(text, ents) {
    A navy summary on top (the month in one sentence, and the score with its range),
    then one of four tabs: Overview, Your plan, Every question, Score breakdown. */
 const BUILD = { overview: overviewTab, questions: questionsTab, plan: planTab, breakdown: breakdownTab };
+// A cited site that is another business's own website (triplepfence.com for "Triple P Fence"). Nobody can get
+// listed on a competitor's site, so these are shown for what they are.
+const squashName = (s) => String(s || "").toLowerCase().replace(/&/g, "and").replace(/\b(the|co|company|llc|inc|ltd)\b/g, "").replace(/[^a-z0-9]/g, "");
+function siteOwner(domain, names) {
+  if (SITE_NAMES[domain] || domain === "google maps") return null;      // a known directory or review site
+  const core = String(domain).replace(/\.(com|net|org|biz|us|co|info|me)$/, "").replace(/[^a-z0-9]/g, "");
+  if (core.length < 6) return null;
+  return (names || []).find((n) => { const q = squashName(n); return q.length >= 6 && (core === q || core.includes(q) || (core.length >= 8 && q.includes(core))); }) || null;
+}
 function render() {
   const audits = DATA.audits, au = audits[CUR], prev = CUR > 0 ? audits[CUR - 1] : null;
   const ents = au.entities, you = ents.find((e) => e.isClient), comps = ents.filter((e) => !e.isClient);
@@ -1555,9 +1564,12 @@ function breakdownTab(ctx) {
   const byEngine = breakdown("By AI platform", "eng", (k) => ENGINE_LABEL[k] || k, allEngines.filter((e) => !F.engines.size || F.engines.has(e)));
   const byTown = allTowns.length > 1 ? breakdown("By customer location", "town", (k) => k, allTowns.filter((t) => !F.towns.size || F.towns.has(t))) : null;
   const srcs = Object.entries(st.sources).sort((a, b) => b[1] - a[1]).slice(0, 10), maxS = Math.max(1, ...srcs.map((s) => s[1]));
-  const sources = panel("c6", "Where AI gets its information", "Sites cited in these answers. Being on them, with accurate details, is the most direct way to be named.",
-    srcs.length ? srcs.map(([d, c]) => h("div", { class: "src" + (d === au.site?.domain ? " you" : "") },
-      h("span", { text: d === au.site?.domain ? "Your website" : siteName(d) }), h("div", { class: "src-t" }, h("i", { style: `width:${(c / maxS) * 100}%` })), h("b", { text: pct(c / Math.max(1, st.n)) })))
+  const bizNames = [...(au.entities || []).filter((e) => !e.isClient).map((e) => e.name), ...Object.keys(overall(au).others || {}), ...Object.keys(st.others || {})];
+  const ownerOf = (d) => (d === au.site?.domain ? null : siteOwner(d, bizNames)), anyBiz = srcs.some(([d]) => ownerOf(d));
+  const sources = panel("c6", "Where AI gets its information", "Sites cited in these answers. For directories and review sites, being on them with accurate details is the most direct way to be named."
+      + (anyBiz ? " Another business’s own website is here because AI quoted it directly, which is what a clear website earns." : ""),
+    srcs.length ? srcs.map(([d, c]) => { const own = ownerOf(d); return h("div", { class: "src" + (d === au.site?.domain ? " you" : "") },
+      h("span", { text: d === au.site?.domain ? "Your website" : own ? `${own}’s own website` : siteName(d) }), h("div", { class: "src-t" }, h("i", { style: `width:${(c / maxS) * 100}%${own ? ";background:var(--them-3)" : ""}` })), h("b", { text: pct(c / Math.max(1, st.n)) })); })
       : h("p", { class: "muted small", text: "No sources for these filters." }));
   const others = Object.entries(st.others).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const named = panel("c6", "Others AI names", "Businesses that come up in your customers’ questions besides the ones we track.",
